@@ -1,17 +1,15 @@
 import { UserSchema } from '#database/schema'
-import { compose } from '@adonisjs/core/helpers'
 import { DbAccessTokensProvider } from '@adonisjs/auth/access_tokens'
 import type { AccessToken } from '@adonisjs/auth/access_tokens'
-import { column, hasMany } from '@adonisjs/lucid/orm'
+import { hasMany } from '@adonisjs/lucid/orm'
 import type { HasMany } from '@adonisjs/lucid/types/relations'
 import Reservation from '#models/reservation'
 
-export default class User extends compose(UserSchema) {
+export default class User extends UserSchema {
   static accessTokens = DbAccessTokensProvider.forModel(User)
   declare currentAccessToken?: AccessToken
 
-  @column() declare role: 'admin' | 'worker' | 'customer'
-  @column() declare phone: string | null
+  declare role: 'admin' | 'worker' | 'customer'
 
   @hasMany(() => Reservation)
   declare reservations: HasMany<typeof Reservation>
