@@ -52,7 +52,8 @@ export default class GuestReservationsController {
         fullName,
         phone,
         role: 'customer',
-        password: phone, // temporary password = phone, hashed by beforeSave hook
+        password: phone,
+        email: `${phone}@padel.temp`,
         hasLoggedIn: false,
       })
     } else if (!user.fullName) {
