@@ -1,7 +1,8 @@
 import { UserSchema } from '#database/schema'
 import { DbAccessTokensProvider } from '@adonisjs/auth/access_tokens'
 import type { AccessToken } from '@adonisjs/auth/access_tokens'
-import { hasMany } from '@adonisjs/lucid/orm'
+import hash from '@adonisjs/core/services/hash'
+import { beforeSave, hasMany } from '@adonisjs/lucid/orm'
 import type { HasMany } from '@adonisjs/lucid/types/relations'
 import Reservation from '#models/reservation'
 
@@ -10,6 +11,13 @@ export default class User extends UserSchema {
   declare currentAccessToken?: AccessToken
 
   declare role: 'admin' | 'worker' | 'customer'
+
+  @beforeSave()
+  static async hashPassword(user: User) {
+    if (user.$dirty.password) {
+      user.password = await hash.make(user.password)
+    }
+  }
 
   @hasMany(() => Reservation)
   declare reservations: HasMany<typeof Reservation>
