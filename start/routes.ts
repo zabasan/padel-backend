@@ -19,17 +19,20 @@ router
     // Settings — public read, no auth required
     router.get('settings', [controllers.Settings, 'show'])
 
+    // Public reads — guests need these to browse courts before reserving
+    router.get('courts', [controllers.Courts, 'index'])
+    router.get('courts/availability', [controllers.Reservations, 'availability'])
+    router.get('courts/:id', [controllers.Courts, 'show'])
+
+    // Guest reservation — creates user + reservation atomically, no auth required
+    router.post('guest/reservations', [controllers.GuestReservations, 'store'])
+
     // Authenticated routes
     router
       .group(() => {
         // Profile
         router.get('profile', [controllers.Profile, 'show'])
         router.post('logout', [controllers.AccessTokens, 'destroy'])
-
-        // Courts - read by all authenticated users
-        router.get('courts', [controllers.Courts, 'index'])
-        router.get('courts/availability', [controllers.Reservations, 'availability'])
-        router.get('courts/:id', [controllers.Courts, 'show'])
 
         // Courts - write only for admin and worker
         router

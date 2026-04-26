@@ -13,9 +13,6 @@ export interface ApiDefinition {
     show: typeof routes['settings.show']
     update: typeof routes['settings.update']
   }
-  profile: {
-    show: typeof routes['profile.show']
-  }
   courts: {
     index: typeof routes['courts.index']
     show: typeof routes['courts.show']
@@ -33,6 +30,12 @@ export interface ApiDefinition {
     update: typeof routes['reservations.update']
     destroy: typeof routes['reservations.destroy']
     hideNext: typeof routes['reservations.hide_next']
+  }
+  guestReservations: {
+    store: typeof routes['guest_reservations.store']
+  }
+  profile: {
+    show: typeof routes['profile.show']
   }
   users: {
     store: typeof routes['users.store']

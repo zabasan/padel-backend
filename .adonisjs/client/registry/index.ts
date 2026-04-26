@@ -24,18 +24,6 @@ const routes = {
     tokens: [{"old":"/api/v1/settings","type":0,"val":"api","end":""},{"old":"/api/v1/settings","type":0,"val":"v1","end":""},{"old":"/api/v1/settings","type":0,"val":"settings","end":""}],
     types: placeholder as Registry['settings.show']['types'],
   },
-  'profile.show': {
-    methods: ["GET","HEAD"],
-    pattern: '/api/v1/profile',
-    tokens: [{"old":"/api/v1/profile","type":0,"val":"api","end":""},{"old":"/api/v1/profile","type":0,"val":"v1","end":""},{"old":"/api/v1/profile","type":0,"val":"profile","end":""}],
-    types: placeholder as Registry['profile.show']['types'],
-  },
-  'access_tokens.destroy': {
-    methods: ["POST"],
-    pattern: '/api/v1/logout',
-    tokens: [{"old":"/api/v1/logout","type":0,"val":"api","end":""},{"old":"/api/v1/logout","type":0,"val":"v1","end":""},{"old":"/api/v1/logout","type":0,"val":"logout","end":""}],
-    types: placeholder as Registry['access_tokens.destroy']['types'],
-  },
   'courts.index': {
     methods: ["GET","HEAD"],
     pattern: '/api/v1/courts',
@@ -53,6 +41,24 @@ const routes = {
     pattern: '/api/v1/courts/:id',
     tokens: [{"old":"/api/v1/courts/:id","type":0,"val":"api","end":""},{"old":"/api/v1/courts/:id","type":0,"val":"v1","end":""},{"old":"/api/v1/courts/:id","type":0,"val":"courts","end":""},{"old":"/api/v1/courts/:id","type":1,"val":"id","end":""}],
     types: placeholder as Registry['courts.show']['types'],
+  },
+  'guest_reservations.store': {
+    methods: ["POST"],
+    pattern: '/api/v1/guest/reservations',
+    tokens: [{"old":"/api/v1/guest/reservations","type":0,"val":"api","end":""},{"old":"/api/v1/guest/reservations","type":0,"val":"v1","end":""},{"old":"/api/v1/guest/reservations","type":0,"val":"guest","end":""},{"old":"/api/v1/guest/reservations","type":0,"val":"reservations","end":""}],
+    types: placeholder as Registry['guest_reservations.store']['types'],
+  },
+  'profile.show': {
+    methods: ["GET","HEAD"],
+    pattern: '/api/v1/profile',
+    tokens: [{"old":"/api/v1/profile","type":0,"val":"api","end":""},{"old":"/api/v1/profile","type":0,"val":"v1","end":""},{"old":"/api/v1/profile","type":0,"val":"profile","end":""}],
+    types: placeholder as Registry['profile.show']['types'],
+  },
+  'access_tokens.destroy': {
+    methods: ["POST"],
+    pattern: '/api/v1/logout',
+    tokens: [{"old":"/api/v1/logout","type":0,"val":"api","end":""},{"old":"/api/v1/logout","type":0,"val":"v1","end":""},{"old":"/api/v1/logout","type":0,"val":"logout","end":""}],
+    types: placeholder as Registry['access_tokens.destroy']['types'],
   },
   'courts.store': {
     methods: ["POST"],

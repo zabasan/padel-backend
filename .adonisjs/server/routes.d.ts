@@ -7,11 +7,12 @@ export type ScannedRoutes = {
     'new_account.store': { paramsTuple?: []; params?: {} }
     'access_tokens.store': { paramsTuple?: []; params?: {} }
     'settings.show': { paramsTuple?: []; params?: {} }
-    'profile.show': { paramsTuple?: []; params?: {} }
-    'access_tokens.destroy': { paramsTuple?: []; params?: {} }
     'courts.index': { paramsTuple?: []; params?: {} }
     'reservations.availability': { paramsTuple?: []; params?: {} }
     'courts.show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'guest_reservations.store': { paramsTuple?: []; params?: {} }
+    'profile.show': { paramsTuple?: []; params?: {} }
+    'access_tokens.destroy': { paramsTuple?: []; params?: {} }
     'courts.store': { paramsTuple?: []; params?: {} }
     'courts.update': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'courts.destroy': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
@@ -34,10 +35,10 @@ export type ScannedRoutes = {
   }
   GET: {
     'settings.show': { paramsTuple?: []; params?: {} }
-    'profile.show': { paramsTuple?: []; params?: {} }
     'courts.index': { paramsTuple?: []; params?: {} }
     'reservations.availability': { paramsTuple?: []; params?: {} }
     'courts.show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'profile.show': { paramsTuple?: []; params?: {} }
     'reservations.index': { paramsTuple?: []; params?: {} }
     'reservations.show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'users.index': { paramsTuple?: []; params?: {} }
@@ -46,10 +47,10 @@ export type ScannedRoutes = {
   }
   HEAD: {
     'settings.show': { paramsTuple?: []; params?: {} }
-    'profile.show': { paramsTuple?: []; params?: {} }
     'courts.index': { paramsTuple?: []; params?: {} }
     'reservations.availability': { paramsTuple?: []; params?: {} }
     'courts.show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'profile.show': { paramsTuple?: []; params?: {} }
     'reservations.index': { paramsTuple?: []; params?: {} }
     'reservations.show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'users.index': { paramsTuple?: []; params?: {} }
@@ -59,6 +60,7 @@ export type ScannedRoutes = {
   POST: {
     'new_account.store': { paramsTuple?: []; params?: {} }
     'access_tokens.store': { paramsTuple?: []; params?: {} }
+    'guest_reservations.store': { paramsTuple?: []; params?: {} }
     'access_tokens.destroy': { paramsTuple?: []; params?: {} }
     'courts.store': { paramsTuple?: []; params?: {} }
     'reservations.store': { paramsTuple?: []; params?: {} }
