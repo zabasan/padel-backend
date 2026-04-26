@@ -18,7 +18,7 @@ const corsConfig = defineConfig({
    * In production, keep an explicit allowlist (empty by default, so no
    * cross-origin browser access is allowed until configured).
    */
-  origin: app.inDev ? true : ['https://padel-front-five.vercel.app','https://padel-front-pi.vercel.app'],
+  origin: app.inDev ? true : ['https://padel-front-theta.vercel.app/'],
 
   /**
    * HTTP methods accepted for cross-origin requests.
