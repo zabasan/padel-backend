@@ -1,0 +1,48 @@
+/* eslint-disable prettier/prettier */
+import type { routes } from './index.ts'
+
+export interface ApiDefinition {
+  newAccount: {
+    store: typeof routes['new_account.store']
+  }
+  accessTokens: {
+    store: typeof routes['access_tokens.store']
+    destroy: typeof routes['access_tokens.destroy']
+  }
+  settings: {
+    show: typeof routes['settings.show']
+    update: typeof routes['settings.update']
+  }
+  profile: {
+    show: typeof routes['profile.show']
+  }
+  courts: {
+    index: typeof routes['courts.index']
+    show: typeof routes['courts.show']
+    store: typeof routes['courts.store']
+    update: typeof routes['courts.update']
+    destroy: typeof routes['courts.destroy']
+    toggleActive: typeof routes['courts.toggle_active']
+    updatePriceRanges: typeof routes['courts.update_price_ranges']
+  }
+  reservations: {
+    availability: typeof routes['reservations.availability']
+    index: typeof routes['reservations.index']
+    show: typeof routes['reservations.show']
+    store: typeof routes['reservations.store']
+    update: typeof routes['reservations.update']
+    destroy: typeof routes['reservations.destroy']
+    hideNext: typeof routes['reservations.hide_next']
+  }
+  users: {
+    store: typeof routes['users.store']
+    index: typeof routes['users.index']
+    show: typeof routes['users.show']
+    update: typeof routes['users.update']
+    resetLogin: typeof routes['users.reset_login']
+    destroy: typeof routes['users.destroy']
+  }
+  stats: {
+    index: typeof routes['stats.index']
+  }
+}
