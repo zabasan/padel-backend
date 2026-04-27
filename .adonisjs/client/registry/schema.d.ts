@@ -247,6 +247,30 @@ export interface Registry {
       errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/reservations_controller').default['hideNext']>>>
     }
   }
+  'reservations.pay_deposit': {
+    methods: ["PATCH"]
+    pattern: '/api/v1/reservations/:id/pay-deposit'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/reservations_controller').default['payDeposit']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/reservations_controller').default['payDeposit']>>>
+    }
+  }
+  'reservations.pay_total': {
+    methods: ["PATCH"]
+    pattern: '/api/v1/reservations/:id/pay-total'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/reservations_controller').default['payTotal']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/reservations_controller').default['payTotal']>>>
+    }
+  }
   'users.store': {
     methods: ["POST"]
     pattern: '/api/v1/users'

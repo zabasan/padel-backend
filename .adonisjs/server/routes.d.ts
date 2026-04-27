@@ -24,6 +24,8 @@ export type ScannedRoutes = {
     'reservations.update': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'reservations.destroy': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'reservations.hide_next': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'reservations.pay_deposit': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'reservations.pay_total': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'users.store': { paramsTuple?: []; params?: {} }
     'users.index': { paramsTuple?: []; params?: {} }
     'users.show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
@@ -82,6 +84,8 @@ export type ScannedRoutes = {
   PATCH: {
     'courts.toggle_active': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'reservations.hide_next': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'reservations.pay_deposit': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'reservations.pay_total': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
   }
 }
 declare module '@adonisjs/core/types/http' {

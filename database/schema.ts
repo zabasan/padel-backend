@@ -77,7 +77,7 @@ export class CourtSchema extends BaseModel {
 }
 
 export class ReservationSchema extends BaseModel {
-  static $columns = ['contactPhone', 'courtId', 'createdAt', 'customerId', 'endTime', 'hiddenUntil', 'id', 'isRecurring', 'notes', 'startTime', 'status', 'totalPrice', 'updatedAt', 'userId'] as const
+  static $columns = ['contactPhone', 'courtId', 'createdAt', 'customerId', 'depositPaid', 'depositPercentage', 'depositReceipt', 'endTime', 'hiddenUntil', 'id', 'isRecurring', 'notes', 'startTime', 'status', 'totalPaid', 'totalPrice', 'totalReceipt', 'updatedAt', 'userId'] as const
   $columns = ReservationSchema.$columns
   @column()
   declare contactPhone: string | null
@@ -87,6 +87,12 @@ export class ReservationSchema extends BaseModel {
   declare createdAt: DateTime
   @column()
   declare customerId: number | null
+  @column()
+  declare depositPaid: boolean
+  @column()
+  declare depositPercentage: string | null
+  @column()
+  declare depositReceipt: string | null
   @column.dateTime()
   declare endTime: DateTime
   @column.date()
@@ -102,7 +108,11 @@ export class ReservationSchema extends BaseModel {
   @column()
   declare status: string
   @column()
+  declare totalPaid: boolean
+  @column()
   declare totalPrice: string
+  @column()
+  declare totalReceipt: string | null
   @column.dateTime({ autoCreate: true, autoUpdate: true })
   declare updatedAt: DateTime | null
   @column()

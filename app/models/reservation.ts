@@ -50,6 +50,21 @@ export default class Reservation extends BaseModel {
   })
   declare hiddenUntil: string | null
 
+  @column()
+  declare depositPercentage: number | null
+
+  @column({ consume: (v) => Boolean(v) })
+  declare depositPaid: boolean
+
+  @column()
+  declare depositReceipt: string | null
+
+  @column({ consume: (v) => Boolean(v) })
+  declare totalPaid: boolean
+
+  @column()
+  declare totalReceipt: string | null
+
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime
 

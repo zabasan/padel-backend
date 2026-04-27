@@ -52,6 +52,8 @@ router
         router.put('reservations/:id', [controllers.Reservations, 'update'])
         router.delete('reservations/:id', [controllers.Reservations, 'destroy'])
         router.patch('reservations/:id/hide-next', [controllers.Reservations, 'hideNext'])
+        router.patch('reservations/:id/pay-deposit', [controllers.Reservations, 'payDeposit'])
+        router.patch('reservations/:id/pay-total', [controllers.Reservations, 'payTotal'])
 
         // Users management
         router

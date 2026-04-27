@@ -36,8 +36,7 @@ export default class StatsController {
       FROM courts c
       LEFT JOIN reservations r
         ON r.court_id = c.id
-        AND r.status = 'confirmed'
-        AND r.end_time <= NOW()
+        AND r.total_paid = 1
         AND r.start_time >= ?
         AND r.start_time <= ?
       GROUP BY c.id, c.name, c.type

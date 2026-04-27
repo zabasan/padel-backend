@@ -14,6 +14,7 @@ const reservationValidator = vine.compile(
     notes: vine.string().trim().optional(),
     customerId: vine.number().positive().optional(),
     isRecurring: vine.boolean().optional(),
+    depositPercentage: vine.number().min(0).max(100).optional(),
   })
 )
 
@@ -223,6 +224,9 @@ export default class ReservationsController {
       totalPrice,
       status: 'pending',
       isRecurring: data.isRecurring ?? false,
+      depositPercentage: data.depositPercentage != null ? data.depositPercentage : null,
+      depositPaid: false,
+      totalPaid: false,
     })
 
     await reservation.load('court')
@@ -306,6 +310,36 @@ export default class ReservationsController {
     }
 
     reservation.hiddenUntil = next.plus({ days: 1 }).toISODate()!
+    await reservation.save()
+    return response.ok(reservation)
+  }
+
+  async payDeposit({ params, request, auth, response }: HttpContext) {
+    const user = auth.user!
+    if (user.role === 'customer') return response.forbidden({ message: 'Sin permisos' })
+
+    const reservation = await Reservation.findOrFail(params.id)
+    if (reservation.depositPaid) return response.badRequest({ message: 'La seña ya fue registrada' })
+
+    const receipt = request.input('receipt', null)
+    reservation.depositPaid = true
+    reservation.status = 'confirmed'
+    if (receipt) reservation.depositReceipt = receipt
+    await reservation.save()
+    return response.ok(reservation)
+  }
+
+  async payTotal({ params, request, auth, response }: HttpContext) {
+    const user = auth.user!
+    if (user.role === 'customer') return response.forbidden({ message: 'Sin permisos' })
+
+    const reservation = await Reservation.findOrFail(params.id)
+    if (!reservation.depositPaid) return response.badRequest({ message: 'Primero debe registrarse el pago de la seña' })
+    if (reservation.totalPaid) return response.badRequest({ message: 'El pago total ya fue registrado' })
+
+    const receipt = request.input('receipt', null)
+    reservation.totalPaid = true
+    if (receipt) reservation.totalReceipt = receipt
     await reservation.save()
     return response.ok(reservation)
   }

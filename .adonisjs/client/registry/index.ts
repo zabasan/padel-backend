@@ -126,6 +126,18 @@ const routes = {
     tokens: [{"old":"/api/v1/reservations/:id/hide-next","type":0,"val":"api","end":""},{"old":"/api/v1/reservations/:id/hide-next","type":0,"val":"v1","end":""},{"old":"/api/v1/reservations/:id/hide-next","type":0,"val":"reservations","end":""},{"old":"/api/v1/reservations/:id/hide-next","type":1,"val":"id","end":""},{"old":"/api/v1/reservations/:id/hide-next","type":0,"val":"hide-next","end":""}],
     types: placeholder as Registry['reservations.hide_next']['types'],
   },
+  'reservations.pay_deposit': {
+    methods: ["PATCH"],
+    pattern: '/api/v1/reservations/:id/pay-deposit',
+    tokens: [{"old":"/api/v1/reservations/:id/pay-deposit","type":0,"val":"api","end":""},{"old":"/api/v1/reservations/:id/pay-deposit","type":0,"val":"v1","end":""},{"old":"/api/v1/reservations/:id/pay-deposit","type":0,"val":"reservations","end":""},{"old":"/api/v1/reservations/:id/pay-deposit","type":1,"val":"id","end":""},{"old":"/api/v1/reservations/:id/pay-deposit","type":0,"val":"pay-deposit","end":""}],
+    types: placeholder as Registry['reservations.pay_deposit']['types'],
+  },
+  'reservations.pay_total': {
+    methods: ["PATCH"],
+    pattern: '/api/v1/reservations/:id/pay-total',
+    tokens: [{"old":"/api/v1/reservations/:id/pay-total","type":0,"val":"api","end":""},{"old":"/api/v1/reservations/:id/pay-total","type":0,"val":"v1","end":""},{"old":"/api/v1/reservations/:id/pay-total","type":0,"val":"reservations","end":""},{"old":"/api/v1/reservations/:id/pay-total","type":1,"val":"id","end":""},{"old":"/api/v1/reservations/:id/pay-total","type":0,"val":"pay-total","end":""}],
+    types: placeholder as Registry['reservations.pay_total']['types'],
+  },
   'users.store': {
     methods: ["POST"],
     pattern: '/api/v1/users',
