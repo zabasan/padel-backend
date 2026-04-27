@@ -252,6 +252,14 @@ export default class ReservationsController {
           }
         }
         reservation.status = status
+        if (status === 'confirmed' && !reservation.confirmedAt) {
+          reservation.confirmedAt = DateTime.now()
+          reservation.confirmedBy = user.id
+        }
+        if (status === 'cancelled' && !reservation.cancelledAt) {
+          reservation.cancelledAt = DateTime.now()
+          reservation.cancelledBy = user.id
+        }
         await reservation.save()
         return response.ok(reservation)
       }
@@ -292,6 +300,10 @@ export default class ReservationsController {
     }
 
     reservation.status = 'cancelled'
+    if (!reservation.cancelledAt) {
+      reservation.cancelledAt = DateTime.now()
+      reservation.cancelledBy = user.id
+    }
     await reservation.save()
     return response.ok({ message: 'Reserva cancelada correctamente' })
   }
@@ -323,7 +335,13 @@ export default class ReservationsController {
 
     const receipt = request.input('receipt', null)
     reservation.depositPaid = true
+    reservation.depositPaidAt = DateTime.now()
+    reservation.depositPaidBy = user.id
     reservation.status = 'confirmed'
+    if (!reservation.confirmedAt) {
+      reservation.confirmedAt = DateTime.now()
+      reservation.confirmedBy = user.id
+    }
     if (receipt) reservation.depositReceipt = receipt
     await reservation.save()
     return response.ok(reservation)
@@ -339,6 +357,8 @@ export default class ReservationsController {
 
     const receipt = request.input('receipt', null)
     reservation.totalPaid = true
+    reservation.totalPaidAt = DateTime.now()
+    reservation.totalPaidBy = user.id
     if (receipt) reservation.totalReceipt = receipt
     await reservation.save()
     return response.ok(reservation)

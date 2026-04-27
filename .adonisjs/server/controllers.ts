@@ -12,5 +12,6 @@ export const controllers = {
   Reservations: () => import('#controllers/reservations_controller'),
   Settings: () => import('#controllers/settings_controller'),
   Stats: () => import('#controllers/stats_controller'),
+  UserAuditLogs: () => import('#controllers/user_audit_logs_controller'),
   Users: () => import('#controllers/users_controller'),
 }

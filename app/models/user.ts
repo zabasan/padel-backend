@@ -2,7 +2,7 @@ import { UserSchema } from '#database/schema'
 import { DbAccessTokensProvider } from '@adonisjs/auth/access_tokens'
 import type { AccessToken } from '@adonisjs/auth/access_tokens'
 import hash from '@adonisjs/core/services/hash'
-import { beforeSave, hasMany } from '@adonisjs/lucid/orm'
+import { beforeSave, column, hasMany } from '@adonisjs/lucid/orm'
 import type { HasMany } from '@adonisjs/lucid/types/relations'
 import Reservation from '#models/reservation'
 
@@ -11,6 +11,9 @@ export default class User extends UserSchema {
   declare currentAccessToken?: AccessToken
 
   declare role: 'admin' | 'worker' | 'customer'
+
+  @column()
+  declare padelCategory: string | null
 
   @beforeSave()
   static async hashPassword(user: User) {

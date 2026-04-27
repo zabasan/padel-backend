@@ -186,6 +186,12 @@ const routes = {
     tokens: [{"old":"/api/v1/settings","type":0,"val":"api","end":""},{"old":"/api/v1/settings","type":0,"val":"v1","end":""},{"old":"/api/v1/settings","type":0,"val":"settings","end":""}],
     types: placeholder as Registry['settings.update']['types'],
   },
+  'user_audit_logs.index': {
+    methods: ["GET","HEAD"],
+    pattern: '/api/v1/audit/users',
+    tokens: [{"old":"/api/v1/audit/users","type":0,"val":"api","end":""},{"old":"/api/v1/audit/users","type":0,"val":"v1","end":""},{"old":"/api/v1/audit/users","type":0,"val":"audit","end":""},{"old":"/api/v1/audit/users","type":0,"val":"users","end":""}],
+    types: placeholder as Registry['user_audit_logs.index']['types'],
+  },
 } as const satisfies Record<string, AdonisEndpoint>
 
 export { routes }

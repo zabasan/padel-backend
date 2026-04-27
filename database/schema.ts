@@ -77,8 +77,16 @@ export class CourtSchema extends BaseModel {
 }
 
 export class ReservationSchema extends BaseModel {
-  static $columns = ['contactPhone', 'courtId', 'createdAt', 'customerId', 'depositPaid', 'depositPercentage', 'depositReceipt', 'endTime', 'hiddenUntil', 'id', 'isRecurring', 'notes', 'startTime', 'status', 'totalPaid', 'totalPrice', 'totalReceipt', 'updatedAt', 'userId'] as const
+  static $columns = ['cancelledAt', 'cancelledBy', 'confirmedAt', 'confirmedBy', 'contactPhone', 'courtId', 'createdAt', 'customerId', 'depositPaid', 'depositPaidAt', 'depositPaidBy', 'depositPercentage', 'depositReceipt', 'endTime', 'hiddenUntil', 'id', 'isRecurring', 'notes', 'startTime', 'status', 'totalPaid', 'totalPaidAt', 'totalPaidBy', 'totalPrice', 'totalReceipt', 'updatedAt', 'userId'] as const
   $columns = ReservationSchema.$columns
+  @column.dateTime()
+  declare cancelledAt: DateTime | null
+  @column()
+  declare cancelledBy: number | null
+  @column.dateTime()
+  declare confirmedAt: DateTime | null
+  @column()
+  declare confirmedBy: number | null
   @column()
   declare contactPhone: string | null
   @column()
@@ -89,6 +97,10 @@ export class ReservationSchema extends BaseModel {
   declare customerId: number | null
   @column()
   declare depositPaid: boolean
+  @column.dateTime()
+  declare depositPaidAt: DateTime | null
+  @column()
+  declare depositPaidBy: number | null
   @column()
   declare depositPercentage: string | null
   @column()
@@ -109,6 +121,10 @@ export class ReservationSchema extends BaseModel {
   declare status: string
   @column()
   declare totalPaid: boolean
+  @column.dateTime()
+  declare totalPaidAt: DateTime | null
+  @column()
+  declare totalPaidBy: number | null
   @column()
   declare totalPrice: string
   @column()
@@ -128,8 +144,27 @@ export class SettingSchema extends BaseModel {
   declare value: string | null
 }
 
+export class UserAuditLogSchema extends BaseModel {
+  static $columns = ['createdAt', 'field', 'id', 'newValue', 'oldValue', 'performedBy', 'targetUserId'] as const
+  $columns = UserAuditLogSchema.$columns
+  @column.dateTime({ autoCreate: true })
+  declare createdAt: DateTime
+  @column()
+  declare field: string
+  @column({ isPrimary: true })
+  declare id: number
+  @column()
+  declare newValue: string | null
+  @column()
+  declare oldValue: string | null
+  @column()
+  declare performedBy: number | null
+  @column()
+  declare targetUserId: number | null
+}
+
 export class UserSchema extends BaseModel {
-  static $columns = ['createdAt', 'email', 'fullName', 'hasLoggedIn', 'id', 'password', 'phone', 'role', 'updatedAt'] as const
+  static $columns = ['createdAt', 'email', 'fullName', 'hasLoggedIn', 'id', 'padelCategory', 'password', 'phone', 'role', 'updatedAt'] as const
   $columns = UserSchema.$columns
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime
@@ -141,6 +176,8 @@ export class UserSchema extends BaseModel {
   declare hasLoggedIn: boolean
   @column({ isPrimary: true })
   declare id: number
+  @column()
+  declare padelCategory: string | null
   @column({ serializeAs: null })
   declare password: string
   @column()

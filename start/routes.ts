@@ -71,6 +71,7 @@ router
             router.delete('users/:id', [controllers.Users, 'destroy'])
             router.get('stats', [controllers.Stats, 'index'])
             router.put('settings', [controllers.Settings, 'update'])
+            router.get('audit/users', [controllers.UserAuditLogs, 'index'])
           })
           .use(middleware.role({ roles: ['admin'] }))
       })

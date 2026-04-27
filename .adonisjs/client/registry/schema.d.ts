@@ -367,4 +367,16 @@ export interface Registry {
       errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/settings_controller').default['update']>>>
     }
   }
+  'user_audit_logs.index': {
+    methods: ["GET","HEAD"]
+    pattern: '/api/v1/audit/users'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/user_audit_logs_controller').default['index']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/user_audit_logs_controller').default['index']>>>
+    }
+  }
 }

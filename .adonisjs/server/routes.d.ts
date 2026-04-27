@@ -34,6 +34,7 @@ export type ScannedRoutes = {
     'users.destroy': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'stats.index': { paramsTuple?: []; params?: {} }
     'settings.update': { paramsTuple?: []; params?: {} }
+    'user_audit_logs.index': { paramsTuple?: []; params?: {} }
   }
   GET: {
     'settings.show': { paramsTuple?: []; params?: {} }
@@ -46,6 +47,7 @@ export type ScannedRoutes = {
     'users.index': { paramsTuple?: []; params?: {} }
     'users.show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'stats.index': { paramsTuple?: []; params?: {} }
+    'user_audit_logs.index': { paramsTuple?: []; params?: {} }
   }
   HEAD: {
     'settings.show': { paramsTuple?: []; params?: {} }
@@ -58,6 +60,7 @@ export type ScannedRoutes = {
     'users.index': { paramsTuple?: []; params?: {} }
     'users.show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'stats.index': { paramsTuple?: []; params?: {} }
+    'user_audit_logs.index': { paramsTuple?: []; params?: {} }
   }
   POST: {
     'new_account.store': { paramsTuple?: []; params?: {} }

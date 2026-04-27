@@ -14,6 +14,7 @@ const guestReservationValidator = vine.compile(
     startTime: vine.string(),
     endTime: vine.string(),
     notes: vine.string().trim().optional(),
+    padelCategory: vine.enum(['C1','C2','C3','C4','C5','C6','C7','C8','C9'] as const).optional().nullable(),
   })
 )
 
@@ -38,7 +39,7 @@ function calculatePrice(priceRanges: CourtPriceRange[], defaultPrice: number, st
 
 export default class GuestReservationsController {
   async store({ request, response }: HttpContext) {
-    const { fullName, phone, courtId, startTime, endTime, notes } =
+    const { fullName, phone, courtId, startTime, endTime, notes, padelCategory } =
       await request.validateUsing(guestReservationValidator)
 
     // Find or create customer by phone
@@ -55,10 +56,13 @@ export default class GuestReservationsController {
         password: phone,
         email: `${phone}@padel.temp`,
         hasLoggedIn: false,
+        padelCategory: padelCategory ?? null,
       })
-    } else if (!user.fullName) {
-      user.fullName = fullName
-      await user.save()
+    } else {
+      let changed = false
+      if (!user.fullName) { user.fullName = fullName; changed = true }
+      if (padelCategory && !user.padelCategory) { user.padelCategory = padelCategory; changed = true }
+      if (changed) await user.save()
     }
 
     const start = DateTime.fromISO(startTime)
@@ -110,6 +114,7 @@ export default class GuestReservationsController {
         email: user.email,
         role: user.role,
         phone: user.phone,
+        padelCategory: user.padelCategory,
         hasLoggedIn: user.hasLoggedIn,
       },
       token: token.value!.release(),

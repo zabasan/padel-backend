@@ -50,4 +50,7 @@ export interface ApiDefinition {
   stats: {
     index: typeof routes['stats.index']
   }
+  userAuditLogs: {
+    index: typeof routes['user_audit_logs.index']
+  }
 }

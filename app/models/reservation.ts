@@ -65,6 +65,30 @@ export default class Reservation extends BaseModel {
   @column()
   declare totalReceipt: string | null
 
+  @column.dateTime()
+  declare confirmedAt: DateTime | null
+
+  @column()
+  declare confirmedBy: number | null
+
+  @column.dateTime()
+  declare cancelledAt: DateTime | null
+
+  @column()
+  declare cancelledBy: number | null
+
+  @column.dateTime()
+  declare depositPaidAt: DateTime | null
+
+  @column()
+  declare depositPaidBy: number | null
+
+  @column.dateTime()
+  declare totalPaidAt: DateTime | null
+
+  @column()
+  declare totalPaidBy: number | null
+
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime
 
