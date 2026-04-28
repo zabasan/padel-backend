@@ -28,7 +28,11 @@ const priceRangeValidator = vine.compile(
 )
 
 export default class CourtsController {
-  async index({ response }: HttpContext) {
+  async index({ request, response }: HttpContext) {
+    if (request.input('summary') === 'true') {
+      const courts = await Court.query().select('id', 'name')
+      return response.ok(courts)
+    }
     const courts = await Court.query().preload('priceRanges').preload('subCourts')
     return response.ok(courts)
   }

@@ -9,7 +9,7 @@ const reservationValidator = vine.compile(
   vine.object({
     courtId: vine.number().positive(),
     startTime: vine.string(),
-    endTime: vine.string(),
+    duration: vine.number().min(30).max(480),
     contactPhone: vine.string().trim().optional(),
     notes: vine.string().trim().optional(),
     customerId: vine.number().positive().optional(),
@@ -79,6 +79,17 @@ export default class ReservationsController {
     const from = request.input('from')
     const to = request.input('to')
 
+    if (request.input('summary') === 'true') {
+      let summaryQuery = Reservation.query().select('id', 'status')
+      if (user.role === 'customer') {
+        summaryQuery = summaryQuery.where('user_id', user.id)
+      }
+      if (from) summaryQuery = summaryQuery.where('start_time', '>=', DateTime.fromISO(from).startOf('day').toSQL()!)
+      if (to) summaryQuery = summaryQuery.where('start_time', '<=', DateTime.fromISO(to).endOf('day').toSQL()!)
+      const reservations = await summaryQuery
+      return response.ok(reservations)
+    }
+
     let query = Reservation.query().preload('court').preload('user').preload('customer')
 
     if (user.role === 'customer') {
@@ -121,11 +132,7 @@ export default class ReservationsController {
     if (!court.isActive) return response.badRequest({ message: 'La cancha no está disponible' })
 
     const startTime = DateTime.fromISO(data.startTime)
-    const endTime = DateTime.fromISO(data.endTime)
-
-    if (endTime <= startTime) {
-      return response.badRequest({ message: 'La hora de fin debe ser posterior a la hora de inicio' })
-    }
+    const endTime = startTime.plus({ minutes: data.duration })
 
     const endSQL = (endTime.hour === 0 && endTime.minute === 0)
       ? DateTime.fromISO(data.startTime).endOf('day').toSQL()!
@@ -274,7 +281,7 @@ export default class ReservationsController {
     if (!court) return response.notFound({ message: 'Cancha no encontrada' })
 
     const startTime = DateTime.fromISO(data.startTime)
-    const endTime = DateTime.fromISO(data.endTime)
+    const endTime = startTime.plus({ minutes: data.duration })
     const totalPrice = calculatePrice(court.priceRanges, court.pricePerHour, startTime, endTime)
 
     reservation.merge({ courtId: data.courtId, startTime, endTime, contactPhone: data.contactPhone, notes: data.notes, totalPrice })

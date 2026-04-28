@@ -12,7 +12,7 @@ const guestReservationValidator = vine.compile(
     phone: vine.string().trim().minLength(6),
     courtId: vine.number().positive(),
     startTime: vine.string(),
-    endTime: vine.string(),
+    duration: vine.number().min(30).max(480),
     notes: vine.string().trim().optional(),
     padelCategory: vine.enum(['C1','C2','C3','C4','C5','C6','C7','C8','C9'] as const).optional().nullable(),
   })
@@ -39,7 +39,7 @@ function calculatePrice(priceRanges: CourtPriceRange[], defaultPrice: number, st
 
 export default class GuestReservationsController {
   async store({ request, response }: HttpContext) {
-    const { fullName, phone, courtId, startTime, endTime, notes, padelCategory } =
+    const { fullName, phone, courtId, startTime, duration, notes, padelCategory } =
       await request.validateUsing(guestReservationValidator)
 
     // Find or create customer by phone
@@ -66,11 +66,10 @@ export default class GuestReservationsController {
     }
 
     const start = DateTime.fromISO(startTime)
-    const end = DateTime.fromISO(endTime)
-
-    if (!start.isValid || !end.isValid || end <= start) {
+    if (!start.isValid) {
       return response.badRequest({ message: 'Horario inválido' })
     }
+    const end = start.plus({ minutes: duration })
 
     const court = await Court.query()
       .where('id', courtId)
