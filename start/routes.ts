@@ -54,6 +54,8 @@ router
         router.patch('reservations/:id/hide-next', [controllers.Reservations, 'hideNext'])
         router.patch('reservations/:id/pay-deposit', [controllers.Reservations, 'payDeposit'])
         router.patch('reservations/:id/pay-total', [controllers.Reservations, 'payTotal'])
+        router.patch('reservations/:id/increment-games', [controllers.Reservations, 'incrementGames'])
+        router.get('reservations/:id/audit', [controllers.Reservations, 'auditLogs'])
 
         // Users management
         router
@@ -72,6 +74,7 @@ router
             router.get('stats', [controllers.Stats, 'index'])
             router.put('settings', [controllers.Settings, 'update'])
             router.get('audit/users', [controllers.UserAuditLogs, 'index'])
+            router.get('audit/reservations', [controllers.Reservations, 'auditLogsAll'])
           })
           .use(middleware.role({ roles: ['admin'] }))
       })

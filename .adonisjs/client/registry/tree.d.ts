@@ -32,6 +32,9 @@ export interface ApiDefinition {
     hideNext: typeof routes['reservations.hide_next']
     payDeposit: typeof routes['reservations.pay_deposit']
     payTotal: typeof routes['reservations.pay_total']
+    incrementGames: typeof routes['reservations.increment_games']
+    auditLogs: typeof routes['reservations.audit_logs']
+    auditLogsAll: typeof routes['reservations.audit_logs_all']
   }
   guestReservations: {
     store: typeof routes['guest_reservations.store']

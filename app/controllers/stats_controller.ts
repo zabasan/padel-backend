@@ -32,11 +32,17 @@ export default class StatsController {
         c.name,
         c.type,
         COALESCE(COUNT(r.id), 0) AS completed_reservations,
-        COALESCE(SUM(r.total_price), 0) AS total_revenue
+        COALESCE(SUM(
+          CASE
+            WHEN r.is_recurring = 1 THEN r.total_paid_count * r.total_price
+            WHEN r.total_paid = 1 THEN r.total_price
+            ELSE 0
+          END
+        ), 0) AS total_revenue
       FROM courts c
       LEFT JOIN reservations r
         ON r.court_id = c.id
-        AND r.total_paid = 1
+        AND r.status != 'cancelled'
         AND r.start_time >= ?
         AND r.start_time <= ?
       GROUP BY c.id, c.name, c.type

@@ -26,6 +26,8 @@ export type ScannedRoutes = {
     'reservations.hide_next': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'reservations.pay_deposit': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'reservations.pay_total': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'reservations.increment_games': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'reservations.audit_logs': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'users.store': { paramsTuple?: []; params?: {} }
     'users.index': { paramsTuple?: []; params?: {} }
     'users.show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
@@ -35,6 +37,7 @@ export type ScannedRoutes = {
     'stats.index': { paramsTuple?: []; params?: {} }
     'settings.update': { paramsTuple?: []; params?: {} }
     'user_audit_logs.index': { paramsTuple?: []; params?: {} }
+    'reservations.audit_logs_all': { paramsTuple?: []; params?: {} }
   }
   GET: {
     'settings.show': { paramsTuple?: []; params?: {} }
@@ -44,10 +47,12 @@ export type ScannedRoutes = {
     'profile.show': { paramsTuple?: []; params?: {} }
     'reservations.index': { paramsTuple?: []; params?: {} }
     'reservations.show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'reservations.audit_logs': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'users.index': { paramsTuple?: []; params?: {} }
     'users.show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'stats.index': { paramsTuple?: []; params?: {} }
     'user_audit_logs.index': { paramsTuple?: []; params?: {} }
+    'reservations.audit_logs_all': { paramsTuple?: []; params?: {} }
   }
   HEAD: {
     'settings.show': { paramsTuple?: []; params?: {} }
@@ -57,10 +62,12 @@ export type ScannedRoutes = {
     'profile.show': { paramsTuple?: []; params?: {} }
     'reservations.index': { paramsTuple?: []; params?: {} }
     'reservations.show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'reservations.audit_logs': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'users.index': { paramsTuple?: []; params?: {} }
     'users.show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'stats.index': { paramsTuple?: []; params?: {} }
     'user_audit_logs.index': { paramsTuple?: []; params?: {} }
+    'reservations.audit_logs_all': { paramsTuple?: []; params?: {} }
   }
   POST: {
     'new_account.store': { paramsTuple?: []; params?: {} }
@@ -89,6 +96,7 @@ export type ScannedRoutes = {
     'reservations.hide_next': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'reservations.pay_deposit': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'reservations.pay_total': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'reservations.increment_games': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
   }
 }
 declare module '@adonisjs/core/types/http' {

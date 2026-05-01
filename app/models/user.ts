@@ -10,7 +10,7 @@ export default class User extends UserSchema {
   static accessTokens = DbAccessTokensProvider.forModel(User)
   declare currentAccessToken?: AccessToken
 
-  declare role: 'admin' | 'worker' | 'customer'
+  declare role: 'admin' | 'worker' | 'customer' | 'professor'
 
   @column()
   declare padelCategory: string | null

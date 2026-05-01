@@ -89,6 +89,21 @@ export default class Reservation extends BaseModel {
   @column()
   declare totalPaidBy: number | null
 
+  @column()
+  declare discountPercentage: number
+
+  @column()
+  declare consecutiveGames: number
+
+  @column.dateTime()
+  declare lastIncrementedAt: DateTime | null
+
+  @column()
+  declare totalPaidCount: number
+
+  @column()
+  declare customPrice: number | null
+
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime
 

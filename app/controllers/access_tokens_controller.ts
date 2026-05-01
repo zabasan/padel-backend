@@ -11,6 +11,10 @@ export default class AccessTokensController {
   async store({ request }: HttpContext) {
     const { identifier, password } = request.only(['identifier', 'password'])
 
+    if (!identifier) {
+      throw new errors.E_INVALID_CREDENTIALS('Ingresá tu teléfono o email')
+    }
+
     // Try email first, then phone.
     // For phone: strip non-digits and use suffix matching so "1159510277" matches "+541159510277"
     const digitsOnly = identifier.replace(/\D/g, '')

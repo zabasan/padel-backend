@@ -20,8 +20,11 @@ const priceRangeValidator = vine.compile(
       vine.object({
         startHour: vine.number().min(0).max(23),
         endHour: vine.number().min(1).max(24),
-        pricePerHour: vine.number().positive(),
+        pricePerHour: vine.number().min(0),
         isPeakHour: vine.boolean().optional(),
+        price60Min: vine.number().min(0).optional().nullable(),
+        price90Min: vine.number().min(0).optional().nullable(),
+        price120Min: vine.number().min(0).optional().nullable(),
       })
     ),
   })
@@ -74,11 +77,19 @@ export default class CourtsController {
     const court = await Court.findOrFail(params.id)
     const { ranges } = await request.validateUsing(priceRangeValidator)
 
-    // Delete existing ranges and recreate
     await CourtPriceRange.query().where('court_id', court.id).delete()
 
     for (const range of ranges) {
-      await CourtPriceRange.create({ courtId: court.id, ...range })
+      await CourtPriceRange.create({
+        courtId: court.id,
+        startHour: range.startHour,
+        endHour: range.endHour,
+        pricePerHour: range.pricePerHour,
+        isPeakHour: range.isPeakHour ?? false,
+        price60Min: range.price60Min ?? null,
+        price90Min: range.price90Min ?? null,
+        price120Min: range.price120Min ?? null,
+      })
     }
 
     await court.load('priceRanges')

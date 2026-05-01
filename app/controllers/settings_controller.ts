@@ -13,11 +13,20 @@ export default class SettingsController {
       contactMessage: result['contactMessage'] ?? '',
       complexPhone: result['complexPhone'] ?? '',
       defaultDepositPercentage: result['defaultDepositPercentage'] != null ? Number(result['defaultDepositPercentage']) : 30,
+      recurringPromoEnabled: result['recurringPromoEnabled'] === 'true',
+      recurringPromoGames: result['recurringPromoGames'] != null ? Number(result['recurringPromoGames']) : 9,
+      recurringPromoFreeGames: result['recurringPromoFreeGames'] != null ? Number(result['recurringPromoFreeGames']) : 1,
     })
   }
 
   async update({ request, response }: HttpContext) {
-    const { appTitle, appLogo, colorPalette, contactMessage, complexPhone, defaultDepositPercentage } = request.only(['appTitle', 'appLogo', 'colorPalette', 'contactMessage', 'complexPhone', 'defaultDepositPercentage'])
+    const {
+      appTitle, appLogo, colorPalette, contactMessage, complexPhone,
+      defaultDepositPercentage, recurringPromoEnabled, recurringPromoGames, recurringPromoFreeGames
+    } = request.only([
+      'appTitle', 'appLogo', 'colorPalette', 'contactMessage', 'complexPhone',
+      'defaultDepositPercentage', 'recurringPromoEnabled', 'recurringPromoGames', 'recurringPromoFreeGames'
+    ])
 
     await Setting.updateOrCreate({ key: 'appTitle' }, { key: 'appTitle', value: appTitle ?? 'Padel Complex' })
     await Setting.updateOrCreate({ key: 'appLogo' }, { key: 'appLogo', value: appLogo ?? null })
@@ -25,6 +34,9 @@ export default class SettingsController {
     await Setting.updateOrCreate({ key: 'contactMessage' }, { key: 'contactMessage', value: contactMessage ?? '' })
     await Setting.updateOrCreate({ key: 'complexPhone' }, { key: 'complexPhone', value: complexPhone ?? '' })
     await Setting.updateOrCreate({ key: 'defaultDepositPercentage' }, { key: 'defaultDepositPercentage', value: String(defaultDepositPercentage ?? 30) })
+    await Setting.updateOrCreate({ key: 'recurringPromoEnabled' }, { key: 'recurringPromoEnabled', value: recurringPromoEnabled ? 'true' : 'false' })
+    await Setting.updateOrCreate({ key: 'recurringPromoGames' }, { key: 'recurringPromoGames', value: String(recurringPromoGames ?? 9) })
+    await Setting.updateOrCreate({ key: 'recurringPromoFreeGames' }, { key: 'recurringPromoFreeGames', value: String(recurringPromoFreeGames ?? 1) })
 
     return response.ok({
       appTitle: appTitle ?? 'Padel Complex',
@@ -33,6 +45,9 @@ export default class SettingsController {
       contactMessage: contactMessage ?? '',
       complexPhone: complexPhone ?? '',
       defaultDepositPercentage: defaultDepositPercentage != null ? Number(defaultDepositPercentage) : 30,
+      recurringPromoEnabled: Boolean(recurringPromoEnabled),
+      recurringPromoGames: recurringPromoGames != null ? Number(recurringPromoGames) : 9,
+      recurringPromoFreeGames: recurringPromoFreeGames != null ? Number(recurringPromoFreeGames) : 1,
     })
   }
 }

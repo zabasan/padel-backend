@@ -5,13 +5,14 @@ import vine from '@vinejs/vine'
 import hash from '@adonisjs/core/services/hash'
 
 const PADEL_CATEGORIES = ['C1','C2','C3','C4','C5','C6','C7','C8','C9'] as const
+const ROLES = ['admin', 'worker', 'customer', 'professor'] as const
 
 const updateUserValidator = vine.compile(
   vine.object({
     fullName: vine.string().trim().optional(),
     email: vine.string().email().optional(),
     phone: vine.string().trim().optional(),
-    role: vine.enum(['admin', 'worker', 'customer'] as const).optional(),
+    role: vine.enum(ROLES).optional(),
     password: vine.string().optional(),
     hasLoggedIn: vine.boolean().optional(),
     padelCategory: vine.enum(PADEL_CATEGORIES).optional().nullable(),
@@ -24,12 +25,11 @@ export default class UsersController {
       vine.compile(vine.object({
         fullName: vine.string().trim(),
         phone: vine.string().trim().unique({ table: 'users', column: 'phone' }),
-        role: vine.enum(['admin', 'worker', 'customer'] as const).optional(),
+        role: vine.enum(ROLES).optional(),
         padelCategory: vine.enum(PADEL_CATEGORIES).optional().nullable(),
       }))
     )
 
-    // Use phone as password by default
     const password = await hash.make(data.phone)
 
     const user = await User.create({
@@ -56,18 +56,20 @@ export default class UsersController {
   async resetLogin({ params, response }: HttpContext) {
     const user = await User.findOrFail(params.id)
     user.hasLoggedIn = false
-    
-    // Also reset password to their phone number just in case
     if (user.phone) {
       user.password = await hash.make(user.phone)
     }
-    
     await user.save()
     return response.ok({ message: 'Login reseteado correctamente', phone: user.phone })
   }
 
-  async index({ response }: HttpContext) {
-    const users = await User.query().select(['id', 'full_name', 'email', 'role', 'phone', 'padel_category', 'created_at'])
+  async index({ request, response }: HttpContext) {
+    const roleFilter = request.input('role')
+    let query = User.query().select(['id', 'full_name', 'email', 'role', 'phone', 'padel_category', 'created_at'])
+    if (roleFilter) {
+      query = query.where('role', roleFilter)
+    }
+    const users = await query
     return response.ok(users)
   }
 
@@ -84,7 +86,7 @@ export default class UsersController {
     const user = await User.findOrFail(params.id)
     const data = await request.validateUsing(updateUserValidator)
 
-    const auditableFields = ['fullName', 'phone', 'role', 'padelCategory'] as const
+    const auditableFields = ['fullName', 'email', 'phone', 'role', 'padelCategory'] as const
     const logs: { field: string; oldValue: string | null; newValue: string | null }[] = []
 
     for (const field of auditableFields) {
@@ -98,6 +100,7 @@ export default class UsersController {
     }
 
     if (data.password) {
+      logs.push({ field: 'password', oldValue: '(encriptada)', newValue: '(nueva encriptada)' })
       data.password = await hash.make(data.password)
     }
 

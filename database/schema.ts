@@ -33,7 +33,7 @@ export class AuthAccessTokenSchema extends BaseModel {
 }
 
 export class CourtPriceRangeSchema extends BaseModel {
-  static $columns = ['courtId', 'createdAt', 'endHour', 'id', 'isPeakHour', 'pricePerHour', 'startHour', 'updatedAt'] as const
+  static $columns = ['courtId', 'createdAt', 'endHour', 'id', 'isPeakHour', 'price120Min', 'price60Min', 'price90Min', 'pricePerHour', 'startHour', 'updatedAt'] as const
   $columns = CourtPriceRangeSchema.$columns
   @column()
   declare courtId: number
@@ -45,6 +45,12 @@ export class CourtPriceRangeSchema extends BaseModel {
   declare id: number
   @column()
   declare isPeakHour: boolean
+  @column()
+  declare price120Min: string | null
+  @column()
+  declare price60Min: string | null
+  @column()
+  declare price90Min: string | null
   @column()
   declare pricePerHour: string
   @column()
@@ -76,8 +82,27 @@ export class CourtSchema extends BaseModel {
   declare updatedAt: DateTime | null
 }
 
+export class ReservationAuditLogSchema extends BaseModel {
+  static $columns = ['createdAt', 'field', 'id', 'newValue', 'oldValue', 'performedBy', 'reservationId'] as const
+  $columns = ReservationAuditLogSchema.$columns
+  @column.dateTime({ autoCreate: true })
+  declare createdAt: DateTime
+  @column()
+  declare field: string
+  @column({ isPrimary: true })
+  declare id: number
+  @column()
+  declare newValue: string | null
+  @column()
+  declare oldValue: string | null
+  @column()
+  declare performedBy: number | null
+  @column()
+  declare reservationId: number
+}
+
 export class ReservationSchema extends BaseModel {
-  static $columns = ['cancelledAt', 'cancelledBy', 'confirmedAt', 'confirmedBy', 'contactPhone', 'courtId', 'createdAt', 'customerId', 'depositPaid', 'depositPaidAt', 'depositPaidBy', 'depositPercentage', 'depositReceipt', 'endTime', 'hiddenUntil', 'id', 'isRecurring', 'notes', 'startTime', 'status', 'totalPaid', 'totalPaidAt', 'totalPaidBy', 'totalPrice', 'totalReceipt', 'updatedAt', 'userId'] as const
+  static $columns = ['cancelledAt', 'cancelledBy', 'confirmedAt', 'confirmedBy', 'consecutiveGames', 'contactPhone', 'courtId', 'createdAt', 'customPrice', 'customerId', 'depositPaid', 'depositPaidAt', 'depositPaidBy', 'depositPercentage', 'depositReceipt', 'discountPercentage', 'endTime', 'hiddenUntil', 'id', 'isRecurring', 'lastIncrementedAt', 'notes', 'startTime', 'status', 'totalPaid', 'totalPaidAt', 'totalPaidBy', 'totalPaidCount', 'totalPrice', 'totalReceipt', 'updatedAt', 'userId'] as const
   $columns = ReservationSchema.$columns
   @column.dateTime()
   declare cancelledAt: DateTime | null
@@ -88,11 +113,15 @@ export class ReservationSchema extends BaseModel {
   @column()
   declare confirmedBy: number | null
   @column()
+  declare consecutiveGames: number
+  @column()
   declare contactPhone: string | null
   @column()
   declare courtId: number
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime
+  @column()
+  declare customPrice: string | null
   @column()
   declare customerId: number | null
   @column()
@@ -105,6 +134,8 @@ export class ReservationSchema extends BaseModel {
   declare depositPercentage: string | null
   @column()
   declare depositReceipt: string | null
+  @column()
+  declare discountPercentage: string
   @column.dateTime()
   declare endTime: DateTime
   @column.date()
@@ -113,6 +144,8 @@ export class ReservationSchema extends BaseModel {
   declare id: number
   @column()
   declare isRecurring: boolean
+  @column.dateTime()
+  declare lastIncrementedAt: DateTime | null
   @column()
   declare notes: string | null
   @column.dateTime()
@@ -125,6 +158,8 @@ export class ReservationSchema extends BaseModel {
   declare totalPaidAt: DateTime | null
   @column()
   declare totalPaidBy: number | null
+  @column()
+  declare totalPaidCount: number
   @column()
   declare totalPrice: string
   @column()
