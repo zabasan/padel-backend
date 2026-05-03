@@ -267,11 +267,11 @@ export default class ReservationsController {
       return response.conflict({ message: 'La cancha ya está reservada en ese horario (reserva recurrente)' })
     }
 
+    // Siblings can be reserved independently — only check parent (if booking a child)
+    // or all children (if booking a parent).
     const relatedCourtIds: number[] = []
     if (court.parentCourtId) {
       relatedCourtIds.push(court.parentCourtId)
-      const siblings = await Court.query().where('parent_court_id', court.parentCourtId).whereNot('id', court.id)
-      for (const s of siblings) relatedCourtIds.push(s.id)
     }
     if (court.subCourts.length > 0) {
       for (const sc of court.subCourts) relatedCourtIds.push(sc.id)
@@ -395,12 +395,83 @@ export default class ReservationsController {
     const data = await request.validateUsing(editReservationValidator)
 
     const courtId = data.courtId ?? reservation.courtId
-    const court = await Court.query().where('id', courtId).preload('priceRanges').firstOrFail()
+    const court = await Court.query().where('id', courtId).preload('priceRanges').preload('subCourts').firstOrFail()
 
     const startTime = data.startTime ? DateTime.fromISO(data.startTime) : reservation.startTime
     const currentDurationMin = Math.round(reservation.endTime.diff(reservation.startTime, 'minutes').minutes)
     const duration = data.duration ?? currentDurationMin
     const endTime = startTime.plus({ minutes: duration })
+
+    // Conflict checks (skip for recurring reservations being edited)
+    if (!reservation.isRecurring) {
+      const endSQLc = (endTime.hour === 0 && endTime.minute === 0)
+        ? startTime.endOf('day').toSQL()!
+        : endTime.toSQL()!
+      const startSQLc = startTime.toSQL()!
+
+      const directConflict = await Reservation.query()
+        .where('court_id', courtId)
+        .whereNot('id', reservation.id)
+        .where('is_recurring', false)
+        .whereNot('status', 'cancelled')
+        .where('start_time', '<', endSQLc)
+        .where('end_time', '>', startSQLc)
+        .first()
+
+      if (directConflict) return response.conflict({ message: 'La cancha ya está reservada en ese horario' })
+
+      const recurringOnCourt = await Reservation.query()
+        .where('court_id', courtId)
+        .whereNot('id', reservation.id)
+        .where('is_recurring', true)
+        .whereNot('status', 'cancelled')
+
+      if (hasRecurringConflict(recurringOnCourt, startTime, endTime)) {
+        return response.conflict({ message: 'La cancha ya está reservada en ese horario (reserva recurrente)' })
+      }
+
+      const relatedCourtIds: number[] = []
+      if (court.parentCourtId) {
+        relatedCourtIds.push(court.parentCourtId)
+      }
+      if (court.subCourts.length > 0) {
+        for (const sc of court.subCourts) relatedCourtIds.push(sc.id)
+      }
+
+      if (relatedCourtIds.length > 0) {
+        const relatedDirectConflict = await Reservation.query()
+          .whereIn('court_id', relatedCourtIds)
+          .where('is_recurring', false)
+          .whereNot('status', 'cancelled')
+          .where('start_time', '<', endSQLc)
+          .where('end_time', '>', startSQLc)
+          .first()
+
+        if (relatedDirectConflict) {
+          const isParentConflict = relatedDirectConflict.courtId === court.parentCourtId
+          return response.conflict({ message: isParentConflict
+            ? 'No se puede reservar: la cancha completa ya está reservada en ese horario'
+            : 'No se puede reservar la cancha completa: una o más canchas divisibles ya están reservadas'
+          })
+        }
+
+        const relatedRecurring = await Reservation.query()
+          .whereIn('court_id', relatedCourtIds)
+          .where('is_recurring', true)
+          .whereNot('status', 'cancelled')
+
+        if (relatedRecurring.length > 0) {
+          const parentRecurring = relatedRecurring.filter(r => r.courtId === court.parentCourtId)
+          const subRecurring = relatedRecurring.filter(r => r.courtId !== court.parentCourtId)
+          if (parentRecurring.length > 0 && hasRecurringConflict(parentRecurring, startTime, endTime)) {
+            return response.conflict({ message: 'No se puede reservar: la cancha completa ya está reservada en ese horario' })
+          }
+          if (subRecurring.length > 0 && hasRecurringConflict(subRecurring, startTime, endTime)) {
+            return response.conflict({ message: 'No se puede reservar la cancha completa: una o más canchas divisibles ya están reservadas' })
+          }
+        }
+      }
+    }
 
     // Determine target user role for price calculation
     const targetUser = await User.find(reservation.userId)
