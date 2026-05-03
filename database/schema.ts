@@ -102,7 +102,7 @@ export class ReservationAuditLogSchema extends BaseModel {
 }
 
 export class ReservationSchema extends BaseModel {
-  static $columns = ['cancelledAt', 'cancelledBy', 'confirmedAt', 'confirmedBy', 'consecutiveGames', 'contactPhone', 'courtId', 'createdAt', 'customPrice', 'customerId', 'depositPaid', 'depositPaidAt', 'depositPaidBy', 'depositPercentage', 'depositReceipt', 'discountPercentage', 'endTime', 'hiddenUntil', 'id', 'isRecurring', 'lastIncrementedAt', 'notes', 'startTime', 'status', 'totalPaid', 'totalPaidAt', 'totalPaidBy', 'totalPaidCount', 'totalPrice', 'totalReceipt', 'updatedAt', 'userId'] as const
+  static $columns = ['cancelledAt', 'cancelledBy', 'confirmedAt', 'confirmedBy', 'consecutiveGames', 'contactPhone', 'courtId', 'createdAt', 'customPrice', 'customerId', 'depositFixedAmount', 'depositPaid', 'depositPaidAt', 'depositPaidBy', 'depositPercentage', 'depositReceipt', 'discountPercentage', 'endTime', 'hiddenUntil', 'id', 'isRecurring', 'lastIncrementedAt', 'notes', 'startTime', 'status', 'totalPaid', 'totalPaidAt', 'totalPaidBy', 'totalPaidCount', 'totalPrice', 'totalReceipt', 'updatedAt', 'userId'] as const
   $columns = ReservationSchema.$columns
   @column.dateTime()
   declare cancelledAt: DateTime | null
@@ -124,6 +124,8 @@ export class ReservationSchema extends BaseModel {
   declare customPrice: string | null
   @column()
   declare customerId: number | null
+  @column()
+  declare depositFixedAmount: string | null
   @column()
   declare depositPaid: boolean
   @column.dateTime()

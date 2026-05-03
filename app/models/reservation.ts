@@ -53,6 +53,9 @@ export default class Reservation extends BaseModel {
   @column()
   declare depositPercentage: number | null
 
+  @column()
+  declare depositFixedAmount: number | null
+
   @column({ consume: (v) => Boolean(v) })
   declare depositPaid: boolean
 

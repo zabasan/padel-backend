@@ -20,6 +20,7 @@ const reservationValidator = vine.compile(
     customerId: vine.number().positive().optional(),
     isRecurring: vine.boolean().optional(),
     depositPercentage: vine.number().min(0).max(100).optional(),
+    depositFixedAmount: vine.number().min(0).optional().nullable(),
     discountPercentage: vine.number().min(0).max(100).optional(),
     customPrice: vine.number().min(0).optional().nullable(),
   })
@@ -34,6 +35,7 @@ const editReservationValidator = vine.compile(
     customerId: vine.number().positive().optional().nullable(),
     isRecurring: vine.boolean().optional(),
     depositPercentage: vine.number().min(0).max(100).optional(),
+    depositFixedAmount: vine.number().min(0).optional().nullable(),
     discountPercentage: vine.number().min(0).max(100).optional(),
     customPrice: vine.number().min(0).optional().nullable(),
     courtId: vine.number().positive().optional(),
@@ -333,6 +335,7 @@ export default class ReservationsController {
       status: 'pending',
       isRecurring: data.isRecurring ?? false,
       depositPercentage: data.depositPercentage != null ? data.depositPercentage : null,
+      depositFixedAmount: data.depositFixedAmount != null ? data.depositFixedAmount : null,
       depositPaid: false,
       totalPaid: false,
       discountPercentage: discountPct,
@@ -517,6 +520,9 @@ export default class ReservationsController {
     if (data.depositPercentage !== undefined && data.depositPercentage !== reservation.depositPercentage) {
       auditFields['depositPercentage'] = { old: String(reservation.depositPercentage ?? ''), new: String(data.depositPercentage) }
     }
+    if (data.depositFixedAmount !== undefined && data.depositFixedAmount !== reservation.depositFixedAmount) {
+      auditFields['depositFixedAmount'] = { old: String(reservation.depositFixedAmount ?? ''), new: String(data.depositFixedAmount ?? '') }
+    }
     if (data.customerId !== undefined && data.customerId !== reservation.userId) {
       auditFields['userId'] = { old: String(reservation.userId), new: String(data.customerId) }
     }
@@ -537,6 +543,7 @@ export default class ReservationsController {
       notes: data.notes !== undefined ? data.notes : reservation.notes,
       isRecurring: data.isRecurring !== undefined ? data.isRecurring : reservation.isRecurring,
       depositPercentage: data.depositPercentage !== undefined ? data.depositPercentage : reservation.depositPercentage,
+      depositFixedAmount: data.depositFixedAmount !== undefined ? data.depositFixedAmount : reservation.depositFixedAmount,
     })
 
     if (data.customerId !== undefined) {
