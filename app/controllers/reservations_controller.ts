@@ -160,7 +160,10 @@ export default class ReservationsController {
       query = query.where('user_id', user.id)
     }
 
-    if (from) query = query.where('start_time', '>=', DateTime.fromISO(from).startOf('day').toSQL()!)
+    if (from) {
+      const fromSQL = DateTime.fromISO(from).startOf('day').toSQL()!
+      query = query.where(q => q.where('start_time', '>=', fromSQL).orWhere('is_recurring', true))
+    }
     if (to) query = query.where('start_time', '<=', DateTime.fromISO(to).endOf('day').toSQL()!)
 
     const reservations = await query.orderBy('start_time', 'asc')
