@@ -30,6 +30,7 @@ export interface ApiDefinition {
     update: typeof routes['reservations.update']
     destroy: typeof routes['reservations.destroy']
     hideNext: typeof routes['reservations.hide_next']
+    showNext: typeof routes['reservations.show_next']
     payDeposit: typeof routes['reservations.pay_deposit']
     payTotal: typeof routes['reservations.pay_total']
     incrementGames: typeof routes['reservations.increment_games']

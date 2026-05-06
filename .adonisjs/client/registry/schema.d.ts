@@ -247,6 +247,18 @@ export interface Registry {
       errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/reservations_controller').default['hideNext']>>>
     }
   }
+  'reservations.show_next': {
+    methods: ["PATCH"]
+    pattern: '/api/v1/reservations/:id/show-next'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/reservations_controller').default['showNext']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/reservations_controller').default['showNext']>>>
+    }
+  }
   'reservations.pay_deposit': {
     methods: ["PATCH"]
     pattern: '/api/v1/reservations/:id/pay-deposit'

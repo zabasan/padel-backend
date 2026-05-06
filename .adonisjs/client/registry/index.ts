@@ -126,6 +126,12 @@ const routes = {
     tokens: [{"old":"/api/v1/reservations/:id/hide-next","type":0,"val":"api","end":""},{"old":"/api/v1/reservations/:id/hide-next","type":0,"val":"v1","end":""},{"old":"/api/v1/reservations/:id/hide-next","type":0,"val":"reservations","end":""},{"old":"/api/v1/reservations/:id/hide-next","type":1,"val":"id","end":""},{"old":"/api/v1/reservations/:id/hide-next","type":0,"val":"hide-next","end":""}],
     types: placeholder as Registry['reservations.hide_next']['types'],
   },
+  'reservations.show_next': {
+    methods: ["PATCH"],
+    pattern: '/api/v1/reservations/:id/show-next',
+    tokens: [{"old":"/api/v1/reservations/:id/show-next","type":0,"val":"api","end":""},{"old":"/api/v1/reservations/:id/show-next","type":0,"val":"v1","end":""},{"old":"/api/v1/reservations/:id/show-next","type":0,"val":"reservations","end":""},{"old":"/api/v1/reservations/:id/show-next","type":1,"val":"id","end":""},{"old":"/api/v1/reservations/:id/show-next","type":0,"val":"show-next","end":""}],
+    types: placeholder as Registry['reservations.show_next']['types'],
+  },
   'reservations.pay_deposit': {
     methods: ["PATCH"],
     pattern: '/api/v1/reservations/:id/pay-deposit',

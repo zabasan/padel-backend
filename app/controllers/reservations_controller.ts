@@ -698,17 +698,74 @@ export default class ReservationsController {
     const date = request.input('date')
     if (!courtId || !date) return response.badRequest({ message: 'Se requiere court_id y date' })
 
-    const start = DateTime.fromISO(date).startOf('day')
-    const end = DateTime.fromISO(date).endOf('day')
+    const queryDate = DateTime.fromISO(date)
+    const start = queryDate.startOf('day')
+    const end = queryDate.endOf('day')
+    const queryWeekday = queryDate.weekday
+    const queryDateStr = queryDate.toISODate()!
 
-    const reservations = await Reservation.query()
+    const directReservations = await Reservation.query()
       .where('court_id', courtId)
       .whereNot('status', 'cancelled')
+      .where('is_recurring', false)
       .where('start_time', '>=', start.toSQL()!)
       .where('start_time', '<=', end.toSQL()!)
       .orderBy('start_time', 'asc')
 
-    return response.ok(reservations)
+    const allRecurring = await Reservation.query()
+      .where('court_id', courtId)
+      .whereNot('status', 'cancelled')
+      .where('is_recurring', true)
+      .where('start_time', '<=', end.toSQL()!)
+
+    const activeRecurring = allRecurring.filter(r => {
+      if (r.startTime.weekday !== queryWeekday) return false
+      const hiddenUntilStr = toDateStr(r.hiddenUntil)
+      if (hiddenUntilStr && queryDateStr < hiddenUntilStr) return false
+      return true
+    })
+
+    return response.ok([...directReservations, ...activeRecurring])
+  }
+
+  async showNext({ params, auth, response }: HttpContext) {
+    const user = auth.user!
+    if (user.role === 'customer' || user.role === 'professor') return response.forbidden({ message: 'Sin permisos' })
+
+    const reservation = await Reservation.findOrFail(params.id)
+    if (!reservation.isRecurring) return response.badRequest({ message: 'La reserva no es recurrente' })
+
+    // Find the next occurrence date (same weekday as the recurring reservation, starting from tomorrow)
+    const startWeekday = reservation.startTime.weekday
+    let next = DateTime.now().startOf('day').plus({ days: 1 })
+    while (next.weekday !== startWeekday) {
+      next = next.plus({ days: 1 })
+    }
+
+    // Build the occurrence start/end times on that date
+    const occStart = next.set({ hour: reservation.startTime.hour, minute: reservation.startTime.minute, second: 0, millisecond: 0 })
+    const occEnd = occStart.plus({ minutes: Math.round(reservation.endTime.diff(reservation.startTime, 'minutes').minutes) })
+
+    const endSQL = (occEnd.hour === 0 && occEnd.minute === 0)
+      ? occStart.endOf('day').toSQL()!
+      : occEnd.toSQL()!
+
+    // Check if a direct reservation already occupies this slot
+    const conflict = await Reservation.query()
+      .where('court_id', reservation.courtId)
+      .where('is_recurring', false)
+      .whereNot('status', 'cancelled')
+      .where('start_time', '<', endSQL)
+      .where('end_time', '>', occStart.toSQL()!)
+      .first()
+
+    if (conflict) {
+      return response.conflict({ message: 'No se puede mostrar: ya existe una reserva en ese horario el próximo ' + next.setLocale('es').toFormat('EEEE d/M') })
+    }
+
+    reservation.hiddenUntil = null
+    await reservation.save()
+    return response.ok(reservation)
   }
 
   async auditLogs({ params, auth, response }: HttpContext) {
