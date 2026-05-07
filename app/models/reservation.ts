@@ -98,6 +98,9 @@ export default class Reservation extends BaseModel {
   @column()
   declare consecutiveGames: number
 
+  @column()
+  declare consecutiveGamesSnapshot: number | null
+
   @column.dateTime()
   declare lastIncrementedAt: DateTime | null
 

@@ -602,6 +602,7 @@ export default class ReservationsController {
       next = next.plus({ days: 1 })
     }
 
+    reservation.consecutiveGamesSnapshot = reservation.consecutiveGames
     reservation.hiddenUntil = next.plus({ days: 1 }).toISODate()!
     reservation.consecutiveGames = 0
     await reservation.save()
@@ -764,6 +765,10 @@ export default class ReservationsController {
     }
 
     reservation.hiddenUntil = null
+    if (reservation.consecutiveGamesSnapshot != null) {
+      reservation.consecutiveGames = reservation.consecutiveGamesSnapshot
+      reservation.consecutiveGamesSnapshot = null
+    }
     await reservation.save()
     return response.ok(reservation)
   }
