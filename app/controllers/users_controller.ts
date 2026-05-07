@@ -101,7 +101,6 @@ export default class UsersController {
 
     if (data.password) {
       logs.push({ field: 'password', oldValue: '(encriptada)', newValue: '(nueva encriptada)' })
-      data.password = await hash.make(data.password)
     }
 
     user.merge(data)
