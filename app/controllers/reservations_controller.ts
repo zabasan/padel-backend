@@ -247,6 +247,17 @@ export default class ReservationsController {
     }
     const targetIsProfessor = targetUser.role === 'professor'
 
+    // Professor restrictions: padel only, must end by 18:00
+    if (isProfessor || targetIsProfessor) {
+      if (!isPadelCourt) {
+        return response.badRequest({ message: 'Los profesores solo pueden reservar canchas de pádel' })
+      }
+      const endHour = endTime.hour + endTime.minute / 60
+      if (endHour > 18) {
+        return response.badRequest({ message: 'Las reservas de profesores deben terminar a las 18:00 o antes' })
+      }
+    }
+
     // Validate duration
     if (isPadelCourt && !targetIsProfessor && !isProfessor) {
       if (![60, 90, 120].includes(data.duration)) {
