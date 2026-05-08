@@ -16,16 +16,21 @@ export default class SettingsController {
       recurringPromoEnabled: result['recurringPromoEnabled'] === 'true',
       recurringPromoGames: result['recurringPromoGames'] != null ? Number(result['recurringPromoGames']) : 9,
       recurringPromoFreeGames: result['recurringPromoFreeGames'] != null ? Number(result['recurringPromoFreeGames']) : 1,
+      professorStartHour: result['professorStartHour'] != null ? Number(result['professorStartHour']) : 8,
+      professorEndHour: result['professorEndHour'] != null ? Number(result['professorEndHour']) : 18,
+      professorPadelPrice: result['professorPadelPrice'] != null ? Number(result['professorPadelPrice']) : null,
     })
   }
 
   async update({ request, response }: HttpContext) {
     const {
       appTitle, appLogo, colorPalette, contactMessage, complexPhone,
-      defaultDepositPercentage, recurringPromoEnabled, recurringPromoGames, recurringPromoFreeGames
+      defaultDepositPercentage, recurringPromoEnabled, recurringPromoGames, recurringPromoFreeGames,
+      professorStartHour, professorEndHour, professorPadelPrice
     } = request.only([
       'appTitle', 'appLogo', 'colorPalette', 'contactMessage', 'complexPhone',
-      'defaultDepositPercentage', 'recurringPromoEnabled', 'recurringPromoGames', 'recurringPromoFreeGames'
+      'defaultDepositPercentage', 'recurringPromoEnabled', 'recurringPromoGames', 'recurringPromoFreeGames',
+      'professorStartHour', 'professorEndHour', 'professorPadelPrice'
     ])
 
     await Setting.updateOrCreate({ key: 'appTitle' }, { key: 'appTitle', value: appTitle ?? 'Padel Complex' })
@@ -37,6 +42,9 @@ export default class SettingsController {
     await Setting.updateOrCreate({ key: 'recurringPromoEnabled' }, { key: 'recurringPromoEnabled', value: recurringPromoEnabled ? 'true' : 'false' })
     await Setting.updateOrCreate({ key: 'recurringPromoGames' }, { key: 'recurringPromoGames', value: String(recurringPromoGames ?? 9) })
     await Setting.updateOrCreate({ key: 'recurringPromoFreeGames' }, { key: 'recurringPromoFreeGames', value: String(recurringPromoFreeGames ?? 1) })
+    await Setting.updateOrCreate({ key: 'professorStartHour' }, { key: 'professorStartHour', value: String(professorStartHour ?? 8) })
+    await Setting.updateOrCreate({ key: 'professorEndHour' }, { key: 'professorEndHour', value: String(professorEndHour ?? 18) })
+    await Setting.updateOrCreate({ key: 'professorPadelPrice' }, { key: 'professorPadelPrice', value: professorPadelPrice != null && professorPadelPrice !== '' ? String(professorPadelPrice) : '' })
 
     return response.ok({
       appTitle: appTitle ?? 'Padel Complex',
@@ -48,6 +56,9 @@ export default class SettingsController {
       recurringPromoEnabled: Boolean(recurringPromoEnabled),
       recurringPromoGames: recurringPromoGames != null ? Number(recurringPromoGames) : 9,
       recurringPromoFreeGames: recurringPromoFreeGames != null ? Number(recurringPromoFreeGames) : 1,
+      professorStartHour: professorStartHour != null ? Number(professorStartHour) : 8,
+      professorEndHour: professorEndHour != null ? Number(professorEndHour) : 18,
+      professorPadelPrice: professorPadelPrice != null && professorPadelPrice !== '' ? Number(professorPadelPrice) : null,
     })
   }
 }

@@ -247,14 +247,23 @@ export default class ReservationsController {
     }
     const targetIsProfessor = targetUser.role === 'professor'
 
-    // Professor restrictions: padel only, must end by 18:00
+    // Professor restrictions: padel only, within configured hours
     if (isProfessor || targetIsProfessor) {
       if (!isPadelCourt) {
         return response.badRequest({ message: 'Los profesores solo pueden reservar canchas de pádel' })
       }
+      const rows = await Setting.all()
+      const cfg: Record<string, string | null> = {}
+      for (const r of rows) cfg[r.key] = r.value
+      const profStartHour = cfg['professorStartHour'] != null ? Number(cfg['professorStartHour']) : 8
+      const profEndHour = cfg['professorEndHour'] != null ? Number(cfg['professorEndHour']) : 18
+      const startHour = startTime.hour + startTime.minute / 60
       const endHour = endTime.hour + endTime.minute / 60
-      if (endHour > 18) {
-        return response.badRequest({ message: 'Las reservas de profesores deben terminar a las 18:00 o antes' })
+      if (startHour < profStartHour) {
+        return response.badRequest({ message: `Las reservas de profesores deben comenzar desde las ${String(profStartHour).padStart(2,'0')}:00` })
+      }
+      if (endHour > profEndHour) {
+        return response.badRequest({ message: `Las reservas de profesores deben terminar a las ${String(profEndHour).padStart(2,'0')}:00 o antes` })
       }
     }
 
