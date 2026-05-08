@@ -1,5 +1,6 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import Reservation from '#models/reservation'
+import ReservationHiddenDate from '#models/reservation_hidden_date'
 import ReservationAuditLog from '#models/reservation_audit_log'
 import Court from '#models/court'
 import CourtPriceRange from '#models/court_price_range'
@@ -112,11 +113,15 @@ function hasRecurringConflict(reservations: Reservation[], startTime: DateTime, 
 
   for (const r of reservations) {
     if (r.startTime.weekday !== startWeekday) continue
+    // Skip recurring reservations that haven't started yet
+    const rStartDateISO = r.startTime.toISODate()!
+    if (startDateISO < rStartDateISO) continue
     const rStartMin = timeInMinutes(r.startTime)
     const rEndMin = (r.endTime.hour === 0 && r.endTime.minute === 0) ? 24 * 60 : timeInMinutes(r.endTime)
     if (startMin >= rEndMin || endMin <= rStartMin) continue
-    const hiddenUntilStr = toDateStr(r.hiddenUntil)
-    if (hiddenUntilStr && startDateISO < hiddenUntilStr) continue
+    // Skip if this specific date is hidden in the pivot table
+    const hiddenDates = (r.hiddenDates ?? []).map(hd => toDateStr(hd.hiddenDate))
+    if (hiddenDates.includes(startDateISO)) continue
     return true
   }
   return false
@@ -154,7 +159,7 @@ export default class ReservationsController {
       return response.ok(reservations)
     }
 
-    let query = Reservation.query().preload('court').preload('user').preload('customer')
+    let query = Reservation.query().preload('court').preload('user').preload('customer').preload('hiddenDates')
 
     if (user.role === 'customer' || user.role === 'professor') {
       query = query.where('user_id', user.id)
@@ -172,6 +177,8 @@ export default class ReservationsController {
     const promo = await getRecurringPromoSettings()
     const result = reservations.map(r => {
       const obj = r.toJSON()
+      // Serialize hidden dates as a flat array of date strings
+      obj.hiddenDates = (r.hiddenDates ?? []).map(hd => toDateStr(hd.hiddenDate)).filter(Boolean)
       if (r.isRecurring && promo.enabled && promo.games > 0) {
         const cycle = promo.games + promo.freeGames
         const posInCycle = r.consecutiveGames % cycle
@@ -267,6 +274,7 @@ export default class ReservationsController {
       .where('court_id', data.courtId)
       .where('is_recurring', true)
       .whereNot('status', 'cancelled')
+      .preload('hiddenDates')
 
     if (hasRecurringConflict(recurringOnCourt, startTime, endTime)) {
       return response.conflict({ message: 'La cancha ya está reservada en ese horario (reserva recurrente)' })
@@ -303,6 +311,7 @@ export default class ReservationsController {
         .whereIn('court_id', relatedCourtIds)
         .where('is_recurring', true)
         .whereNot('status', 'cancelled')
+        .preload('hiddenDates')
 
       if (relatedRecurring.length > 0) {
         const parentRecurring = relatedRecurring.filter(r => r.courtId === court.parentCourtId)
@@ -431,6 +440,7 @@ export default class ReservationsController {
         .whereNot('id', reservation.id)
         .where('is_recurring', true)
         .whereNot('status', 'cancelled')
+        .preload('hiddenDates')
 
       if (hasRecurringConflict(recurringOnCourt, startTime, endTime)) {
         return response.conflict({ message: 'La cancha ya está reservada en ese horario (reserva recurrente)' })
@@ -465,6 +475,7 @@ export default class ReservationsController {
           .whereIn('court_id', relatedCourtIds)
           .where('is_recurring', true)
           .whereNot('status', 'cancelled')
+          .preload('hiddenDates')
 
         if (relatedRecurring.length > 0) {
           const parentRecurring = relatedRecurring.filter(r => r.courtId === court.parentCourtId)
@@ -589,24 +600,35 @@ export default class ReservationsController {
     return response.ok({ message: 'Reserva cancelada correctamente' })
   }
 
-  async hideNext({ params, auth, response }: HttpContext) {
+  async hideNext({ params, request, auth, response }: HttpContext) {
     const user = auth.user!
     if (user.role === 'customer' || user.role === 'professor') return response.forbidden({ message: 'Sin permisos' })
 
     const reservation = await Reservation.findOrFail(params.id)
     if (!reservation.isRecurring) return response.badRequest({ message: 'La reserva no es recurrente' })
 
-    const startWeekday = reservation.startTime.weekday
-    let next = DateTime.now().startOf('day').plus({ days: 1 })
-    while (next.weekday !== startWeekday) {
-      next = next.plus({ days: 1 })
+    const dateParam = request.input('date') // YYYY-MM-DD of the specific occurrence to hide
+    let targetDateStr: string
+
+    if (dateParam) {
+      targetDateStr = dateParam
+    } else {
+      const startWeekday = reservation.startTime.weekday
+      let next = DateTime.now().startOf('day').plus({ days: 1 })
+      while (next.weekday !== startWeekday) next = next.plus({ days: 1 })
+      targetDateStr = next.toISODate()!
     }
 
-    reservation.consecutiveGamesSnapshot = reservation.consecutiveGames
-    reservation.hiddenUntil = next.plus({ days: 1 }).toISODate()!
-    reservation.consecutiveGames = 0
-    await reservation.save()
-    return response.ok(reservation)
+    // Insert into pivot table (ignore duplicate)
+    await ReservationHiddenDate.updateOrCreate(
+      { reservationId: reservation.id, hiddenDate: targetDateStr },
+      { reservationId: reservation.id, hiddenDate: targetDateStr }
+    )
+
+    await reservation.load('hiddenDates')
+    const obj = reservation.toJSON()
+    obj.hiddenDates = (reservation.hiddenDates ?? []).map(hd => toDateStr(hd.hiddenDate)).filter(Boolean)
+    return response.ok(obj)
   }
 
   async incrementGames({ params, auth, response }: HttpContext) {
@@ -681,7 +703,12 @@ export default class ReservationsController {
     if (user.role === 'customer' || user.role === 'professor') return response.forbidden({ message: 'Sin permisos' })
 
     const reservation = await Reservation.findOrFail(params.id)
-    if (!reservation.depositPaid) return response.badRequest({ message: 'Primero debe registrarse el pago de la seña' })
+    // For reservations with a deposit requirement, deposit must be paid first.
+    // For recurring reservations without deposit set, allow direct payment.
+    const hasDepositRequirement = reservation.depositPercentage != null || reservation.depositFixedAmount != null
+    if (hasDepositRequirement && !reservation.depositPaid) {
+      return response.badRequest({ message: reservation.isRecurring ? 'Primero debe registrarse el depósito' : 'Primero debe registrarse el pago de la seña' })
+    }
     if (reservation.totalPaid) return response.badRequest({ message: 'El pago total ya fue registrado' })
 
     const receipt = request.input('receipt', null)
@@ -718,59 +745,42 @@ export default class ReservationsController {
       .whereNot('status', 'cancelled')
       .where('is_recurring', true)
       .where('start_time', '<=', end.toSQL()!)
+      .preload('hiddenDates')
 
     const activeRecurring = allRecurring.filter(r => {
       if (r.startTime.weekday !== queryWeekday) return false
-      const hiddenUntilStr = toDateStr(r.hiddenUntil)
-      if (hiddenUntilStr && queryDateStr < hiddenUntilStr) return false
+      const hiddenDates = (r.hiddenDates ?? []).map(hd => toDateStr(hd.hiddenDate))
+      if (hiddenDates.includes(queryDateStr)) return false
       return true
     })
 
     return response.ok([...directReservations, ...activeRecurring])
   }
 
-  async showNext({ params, auth, response }: HttpContext) {
+  async showNext({ params, request, auth, response }: HttpContext) {
     const user = auth.user!
     if (user.role === 'customer' || user.role === 'professor') return response.forbidden({ message: 'Sin permisos' })
 
     const reservation = await Reservation.findOrFail(params.id)
     if (!reservation.isRecurring) return response.badRequest({ message: 'La reserva no es recurrente' })
 
-    // Find the next occurrence date (same weekday as the recurring reservation, starting from tomorrow)
-    const startWeekday = reservation.startTime.weekday
-    let next = DateTime.now().startOf('day').plus({ days: 1 })
-    while (next.weekday !== startWeekday) {
-      next = next.plus({ days: 1 })
+    const dateParam = request.input('date') // YYYY-MM-DD of the specific occurrence to show
+
+    if (dateParam) {
+      // Remove only this specific hidden date from the pivot table
+      await ReservationHiddenDate.query()
+        .where('reservation_id', reservation.id)
+        .where('hidden_date', dateParam)
+        .delete()
+    } else {
+      // Legacy: remove all hidden dates (clear everything)
+      await ReservationHiddenDate.query().where('reservation_id', reservation.id).delete()
     }
 
-    // Build the occurrence start/end times on that date
-    const occStart = next.set({ hour: reservation.startTime.hour, minute: reservation.startTime.minute, second: 0, millisecond: 0 })
-    const occEnd = occStart.plus({ minutes: Math.round(reservation.endTime.diff(reservation.startTime, 'minutes').minutes) })
-
-    const endSQL = (occEnd.hour === 0 && occEnd.minute === 0)
-      ? occStart.endOf('day').toSQL()!
-      : occEnd.toSQL()!
-
-    // Check if a direct reservation already occupies this slot
-    const conflict = await Reservation.query()
-      .where('court_id', reservation.courtId)
-      .where('is_recurring', false)
-      .whereNot('status', 'cancelled')
-      .where('start_time', '<', endSQL)
-      .where('end_time', '>', occStart.toSQL()!)
-      .first()
-
-    if (conflict) {
-      return response.conflict({ message: 'No se puede mostrar: ya existe una reserva en ese horario el próximo ' + next.setLocale('es').toFormat('EEEE d/M') })
-    }
-
-    reservation.hiddenUntil = null
-    if (reservation.consecutiveGamesSnapshot != null) {
-      reservation.consecutiveGames = reservation.consecutiveGamesSnapshot
-      reservation.consecutiveGamesSnapshot = null
-    }
-    await reservation.save()
-    return response.ok(reservation)
+    await reservation.load('hiddenDates')
+    const obj = reservation.toJSON()
+    obj.hiddenDates = (reservation.hiddenDates ?? []).map(hd => toDateStr(hd.hiddenDate)).filter(Boolean)
+    return response.ok(obj)
   }
 
   async auditLogs({ params, auth, response }: HttpContext) {

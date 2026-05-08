@@ -45,18 +45,24 @@ router
           })
           .use(middleware.role({ roles: ['admin', 'worker'] }))
 
-        // Reservations - all authenticated users can CRUD their own
+        // Reservations - read/create/cancel for all authenticated users
         router.get('reservations', [controllers.Reservations, 'index'])
         router.get('reservations/:id', [controllers.Reservations, 'show'])
         router.post('reservations', [controllers.Reservations, 'store'])
         router.put('reservations/:id', [controllers.Reservations, 'update'])
         router.delete('reservations/:id', [controllers.Reservations, 'destroy'])
-        router.patch('reservations/:id/hide-next', [controllers.Reservations, 'hideNext'])
-        router.patch('reservations/:id/show-next', [controllers.Reservations, 'showNext'])
-        router.patch('reservations/:id/pay-deposit', [controllers.Reservations, 'payDeposit'])
-        router.patch('reservations/:id/pay-total', [controllers.Reservations, 'payTotal'])
-        router.patch('reservations/:id/increment-games', [controllers.Reservations, 'incrementGames'])
-        router.get('reservations/:id/audit', [controllers.Reservations, 'auditLogs'])
+
+        // Reservation management actions - admin and worker only
+        router
+          .group(() => {
+            router.patch('reservations/:id/hide-next', [controllers.Reservations, 'hideNext'])
+            router.patch('reservations/:id/show-next', [controllers.Reservations, 'showNext'])
+            router.patch('reservations/:id/pay-deposit', [controllers.Reservations, 'payDeposit'])
+            router.patch('reservations/:id/pay-total', [controllers.Reservations, 'payTotal'])
+            router.patch('reservations/:id/increment-games', [controllers.Reservations, 'incrementGames'])
+            router.get('reservations/:id/audit', [controllers.Reservations, 'auditLogs'])
+          })
+          .use(middleware.role({ roles: ['admin', 'worker'] }))
 
         // Users management
         router

@@ -101,8 +101,23 @@ export class ReservationAuditLogSchema extends BaseModel {
   declare reservationId: number
 }
 
+export class ReservationHiddenDateSchema extends BaseModel {
+  static $columns = ['createdAt', 'hiddenDate', 'id', 'reservationId', 'updatedAt'] as const
+  $columns = ReservationHiddenDateSchema.$columns
+  @column.dateTime({ autoCreate: true })
+  declare createdAt: DateTime
+  @column.date()
+  declare hiddenDate: DateTime
+  @column({ isPrimary: true })
+  declare id: number
+  @column()
+  declare reservationId: number
+  @column.dateTime({ autoCreate: true, autoUpdate: true })
+  declare updatedAt: DateTime
+}
+
 export class ReservationSchema extends BaseModel {
-  static $columns = ['cancelledAt', 'cancelledBy', 'confirmedAt', 'confirmedBy', 'consecutiveGames', 'consecutiveGamesSnapshot', 'contactPhone', 'courtId', 'createdAt', 'customPrice', 'customerId', 'depositFixedAmount', 'depositPaid', 'depositPaidAt', 'depositPaidBy', 'depositPercentage', 'depositReceipt', 'discountPercentage', 'endTime', 'hiddenUntil', 'id', 'isRecurring', 'lastIncrementedAt', 'notes', 'startTime', 'status', 'totalPaid', 'totalPaidAt', 'totalPaidBy', 'totalPaidCount', 'totalPrice', 'totalReceipt', 'updatedAt', 'userId'] as const
+  static $columns = ['cancelledAt', 'cancelledBy', 'confirmedAt', 'confirmedBy', 'consecutiveGames', 'consecutiveGamesSnapshot', 'contactPhone', 'courtId', 'createdAt', 'customPrice', 'customerId', 'depositFixedAmount', 'depositPaid', 'depositPaidAt', 'depositPaidBy', 'depositPercentage', 'depositReceipt', 'discountPercentage', 'endTime', 'hiddenFrom', 'hiddenUntil', 'id', 'isRecurring', 'lastIncrementedAt', 'notes', 'startTime', 'status', 'totalPaid', 'totalPaidAt', 'totalPaidBy', 'totalPaidCount', 'totalPrice', 'totalReceipt', 'updatedAt', 'userId'] as const
   $columns = ReservationSchema.$columns
   @column.dateTime()
   declare cancelledAt: DateTime | null
@@ -142,6 +157,8 @@ export class ReservationSchema extends BaseModel {
   declare discountPercentage: string
   @column.dateTime()
   declare endTime: DateTime
+  @column.date()
+  declare hiddenFrom: DateTime | null
   @column.date()
   declare hiddenUntil: DateTime | null
   @column({ isPrimary: true })

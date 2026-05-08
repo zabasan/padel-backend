@@ -1,8 +1,9 @@
-import { BaseModel, column, belongsTo } from '@adonisjs/lucid/orm'
-import type { BelongsTo } from '@adonisjs/lucid/types/relations'
+import { BaseModel, column, belongsTo, hasMany } from '@adonisjs/lucid/orm'
+import type { BelongsTo, HasMany } from '@adonisjs/lucid/types/relations'
 import { DateTime } from 'luxon'
 import Court from '#models/court'
 import User from '#models/user'
+import ReservationHiddenDate from '#models/reservation_hidden_date'
 
 export default class Reservation extends BaseModel {
   @column({ isPrimary: true })
@@ -49,6 +50,16 @@ export default class Reservation extends BaseModel {
     },
   })
   declare hiddenUntil: string | null
+
+  @column({
+    consume: (value) => {
+      if (!value) return null
+      if (typeof value === 'string') return value.slice(0, 10)
+      if (value instanceof Date) return value.toISOString().slice(0, 10)
+      return String(value).slice(0, 10)
+    },
+  })
+  declare hiddenFrom: string | null
 
   @column()
   declare depositPercentage: number | null
@@ -124,4 +135,7 @@ export default class Reservation extends BaseModel {
 
   @belongsTo(() => User, { foreignKey: 'customerId' })
   declare customer: BelongsTo<typeof User>
+
+  @hasMany(() => ReservationHiddenDate)
+  declare hiddenDates: HasMany<typeof ReservationHiddenDate>
 }
