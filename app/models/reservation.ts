@@ -121,6 +121,9 @@ export default class Reservation extends BaseModel {
   @column()
   declare customPrice: number | null
 
+  @column()
+  declare classType: string | null
+
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime
 

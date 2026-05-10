@@ -24,6 +24,7 @@ const reservationValidator = vine.compile(
     depositFixedAmount: vine.number().min(0).optional().nullable(),
     discountPercentage: vine.number().min(0).max(100).optional(),
     customPrice: vine.number().min(0).optional().nullable(),
+    classType: vine.string().optional().nullable(),
   })
 )
 
@@ -40,6 +41,7 @@ const editReservationValidator = vine.compile(
     discountPercentage: vine.number().min(0).max(100).optional(),
     customPrice: vine.number().min(0).optional().nullable(),
     courtId: vine.number().positive().optional(),
+    classType: vine.string().optional().nullable(),
   })
 )
 
@@ -373,6 +375,7 @@ export default class ReservationsController {
       discountPercentage: discountPct,
       consecutiveGames: 0,
       customPrice: data.customPrice ?? null,
+      classType: data.classType ?? null,
     })
 
     await reservation.load('court')
@@ -573,6 +576,7 @@ export default class ReservationsController {
       totalPrice,
       discountPercentage: discountPct,
       customPrice: data.customPrice !== undefined ? data.customPrice : reservation.customPrice,
+      classType: data.classType !== undefined ? data.classType : reservation.classType,
       contactPhone: data.contactPhone !== undefined ? data.contactPhone : reservation.contactPhone,
       notes: data.notes !== undefined ? data.notes : reservation.notes,
       isRecurring: data.isRecurring !== undefined ? data.isRecurring : reservation.isRecurring,

@@ -117,12 +117,14 @@ export class ReservationHiddenDateSchema extends BaseModel {
 }
 
 export class ReservationSchema extends BaseModel {
-  static $columns = ['cancelledAt', 'cancelledBy', 'confirmedAt', 'confirmedBy', 'consecutiveGames', 'consecutiveGamesSnapshot', 'contactPhone', 'courtId', 'createdAt', 'customPrice', 'customerId', 'depositFixedAmount', 'depositPaid', 'depositPaidAt', 'depositPaidBy', 'depositPercentage', 'depositReceipt', 'discountPercentage', 'endTime', 'hiddenFrom', 'hiddenUntil', 'id', 'isRecurring', 'lastIncrementedAt', 'notes', 'startTime', 'status', 'totalPaid', 'totalPaidAt', 'totalPaidBy', 'totalPaidCount', 'totalPrice', 'totalReceipt', 'updatedAt', 'userId'] as const
+  static $columns = ['cancelledAt', 'cancelledBy', 'classType', 'confirmedAt', 'confirmedBy', 'consecutiveGames', 'consecutiveGamesSnapshot', 'contactPhone', 'courtId', 'createdAt', 'customPrice', 'customerId', 'depositFixedAmount', 'depositPaid', 'depositPaidAt', 'depositPaidBy', 'depositPercentage', 'depositReceipt', 'discountPercentage', 'endTime', 'hiddenFrom', 'hiddenUntil', 'id', 'isRecurring', 'lastIncrementedAt', 'notes', 'startTime', 'status', 'totalPaid', 'totalPaidAt', 'totalPaidBy', 'totalPaidCount', 'totalPrice', 'totalReceipt', 'updatedAt', 'userId'] as const
   $columns = ReservationSchema.$columns
   @column.dateTime()
   declare cancelledAt: DateTime | null
   @column()
   declare cancelledBy: number | null
+  @column()
+  declare classType: string | null
   @column.dateTime()
   declare confirmedAt: DateTime | null
   @column()
