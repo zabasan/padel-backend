@@ -542,7 +542,7 @@ export default class ReservationsController {
     if (data.customPrice !== undefined && data.customPrice !== reservation.customPrice) {
       auditFields['customPrice'] = { old: String(reservation.customPrice ?? ''), new: String(data.customPrice ?? '') }
     }
-    if (data.discountPercentage !== undefined && data.discountPercentage !== reservation.discountPercentage) {
+    if (data.discountPercentage !== undefined && Number(data.discountPercentage) !== Number(reservation.discountPercentage ?? 0)) {
       auditFields['discountPercentage'] = { old: String(reservation.discountPercentage ?? 0), new: String(data.discountPercentage) }
     }
     if (data.notes !== undefined && data.notes !== reservation.notes) {
@@ -554,10 +554,10 @@ export default class ReservationsController {
     if (data.isRecurring !== undefined && data.isRecurring !== reservation.isRecurring) {
       auditFields['isRecurring'] = { old: String(reservation.isRecurring), new: String(data.isRecurring) }
     }
-    if (data.depositPercentage !== undefined && data.depositPercentage !== reservation.depositPercentage) {
+    if (data.depositPercentage !== undefined && Number(data.depositPercentage) !== Number(reservation.depositPercentage ?? 0)) {
       auditFields['depositPercentage'] = { old: String(reservation.depositPercentage ?? ''), new: String(data.depositPercentage) }
     }
-    if (data.depositFixedAmount !== undefined && data.depositFixedAmount !== reservation.depositFixedAmount) {
+    if (data.depositFixedAmount !== undefined && Number(data.depositFixedAmount ?? 0) !== Number(reservation.depositFixedAmount ?? 0)) {
       auditFields['depositFixedAmount'] = { old: String(reservation.depositFixedAmount ?? ''), new: String(data.depositFixedAmount ?? '') }
     }
     if (data.customerId !== undefined && data.customerId !== reservation.userId) {
