@@ -400,11 +400,7 @@ export default class ReservationsController {
     // Status-only update (confirm/cancel)
     const status = request.input('status')
     if (status && ['pending', 'confirmed', 'cancelled'].includes(status) && isAdminOrWorker) {
-      if (status === 'cancelled' && reservation.status === 'confirmed') {
-        if (reservation.startTime < DateTime.now()) {
-          return response.badRequest({ message: 'No se puede cancelar una reserva que ya ocurrió' })
-        }
-      }
+      // Admin/worker can cancel any confirmed reservation regardless of time
       reservation.status = status
       if (status === 'confirmed' && !reservation.confirmedAt) {
         reservation.confirmedAt = DateTime.now()
@@ -610,9 +606,7 @@ export default class ReservationsController {
       if (user.role === 'customer') {
         return response.forbidden({ message: 'Las reservas confirmadas solo pueden cancelarlas admin o empleados' })
       }
-      if (reservation.startTime < DateTime.now()) {
-        return response.badRequest({ message: 'No se puede cancelar una reserva que ya ocurrió' })
-      }
+      // Admin/worker can cancel any confirmed reservation regardless of time
     }
 
     reservation.status = 'cancelled'
