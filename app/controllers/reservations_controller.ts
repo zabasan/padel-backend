@@ -155,8 +155,8 @@ export default class ReservationsController {
       if (user.role === 'customer' || user.role === 'professor') {
         summaryQuery = summaryQuery.where('user_id', user.id)
       }
-      if (from) summaryQuery = summaryQuery.where('start_time', '>=', DateTime.fromISO(from).startOf('day').toSQL()!)
-      if (to) summaryQuery = summaryQuery.where('start_time', '<=', DateTime.fromISO(to).endOf('day').toSQL()!)
+      if (from) summaryQuery = summaryQuery.where('start_time', '>=', DateTime.fromISO(from).toSQL()!)
+      if (to) summaryQuery = summaryQuery.where('start_time', '<=', DateTime.fromISO(to).toSQL()!)
       const reservations = await summaryQuery
       return response.ok(reservations)
     }
@@ -168,10 +168,10 @@ export default class ReservationsController {
     }
 
     if (from) {
-      const fromSQL = DateTime.fromISO(from).startOf('day').toSQL()!
+      const fromSQL = DateTime.fromISO(from).toSQL()!
       query = query.where(q => q.where('start_time', '>=', fromSQL).orWhere('is_recurring', true))
     }
-    if (to) query = query.where('start_time', '<=', DateTime.fromISO(to).endOf('day').toSQL()!)
+    if (to) query = query.where('start_time', '<=', DateTime.fromISO(to).toSQL()!)
 
     const reservations = await query.orderBy('start_time', 'asc')
 
