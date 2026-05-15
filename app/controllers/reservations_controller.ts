@@ -401,6 +401,7 @@ export default class ReservationsController {
     const status = request.input('status')
     if (status && ['pending', 'confirmed', 'cancelled'].includes(status) && isAdminOrWorker) {
       // Admin/worker can cancel any confirmed reservation regardless of time
+      const oldStatus = reservation.status
       reservation.status = status
       if (status === 'confirmed' && !reservation.confirmedAt) {
         reservation.confirmedAt = DateTime.now()
@@ -411,6 +412,7 @@ export default class ReservationsController {
         reservation.cancelledBy = user.id
       }
       await reservation.save()
+      await logReservationChange(user.id, reservation.id, 'status', oldStatus, status)
       return response.ok(reservation)
     }
 
@@ -609,12 +611,14 @@ export default class ReservationsController {
       // Admin/worker can cancel any confirmed reservation regardless of time
     }
 
+    const oldStatus = reservation.status
     reservation.status = 'cancelled'
     if (!reservation.cancelledAt) {
       reservation.cancelledAt = DateTime.now()
       reservation.cancelledBy = user.id
     }
     await reservation.save()
+    await logReservationChange(user.id, reservation.id, 'status', oldStatus, 'cancelled')
     return response.ok({ message: 'Reserva cancelada correctamente' })
   }
 
@@ -703,6 +707,7 @@ export default class ReservationsController {
     if (reservation.depositPaid) return response.badRequest({ message: 'La seña ya fue registrada' })
 
     const receipt = request.input('receipt', null)
+    const oldStatus = reservation.status
     reservation.depositPaid = true
     reservation.depositPaidAt = DateTime.now()
     reservation.depositPaidBy = user.id
@@ -713,6 +718,9 @@ export default class ReservationsController {
     }
     if (receipt) reservation.depositReceipt = receipt
     await reservation.save()
+    if (oldStatus !== 'confirmed') {
+      await logReservationChange(user.id, reservation.id, 'status', oldStatus, 'confirmed')
+    }
     return response.ok(reservation)
   }
 
