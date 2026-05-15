@@ -528,8 +528,8 @@ export default class ReservationsController {
     // Build audit log
     const auditFields: Record<string, { old: string | null; new: string | null }> = {}
 
-    if (data.startTime && reservation.startTime.toISO() !== startTime.toISO()) {
-      auditFields['startTime'] = { old: reservation.startTime.toISO(), new: startTime.toISO() }
+    if (data.startTime && reservation.startTime.toUTC().toISO() !== startTime.toUTC().toISO()) {
+      auditFields['startTime'] = { old: reservation.startTime.toUTC().toISO(), new: startTime.toUTC().toISO() }
     }
     if (data.duration !== undefined && duration !== currentDurationMin) {
       auditFields['duration'] = { old: String(currentDurationMin), new: String(duration) }
