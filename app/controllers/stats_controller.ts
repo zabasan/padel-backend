@@ -9,21 +9,22 @@ export default class StatsController {
 
     let from: DateTime
     let to: DateTime
-    const now = DateTime.now()
+    const TZ = 'America/Argentina/Buenos_Aires'
+    const now = DateTime.now().setZone(TZ)
 
     if (period === 'day') {
-      const d = date ? DateTime.fromISO(date) : now
+      const d = date ? DateTime.fromISO(date, { zone: TZ }) : now
       from = d.startOf('day')
       to = d.endOf('day')
     } else if (period === 'month') {
-      const d = date ? DateTime.fromFormat(date, 'yyyy-MM') : now
+      const d = date ? DateTime.fromFormat(date, 'yyyy-MM', { zone: TZ }) : now
       from = d.startOf('month')
       to = d.endOf('month')
     } else {
       // year
       const year = date ? parseInt(date) : now.year
-      from = DateTime.local(year, 1, 1).startOf('day')
-      to = DateTime.local(year, 12, 31).endOf('day')
+      from = DateTime.fromObject({ year, month: 1, day: 1 }, { zone: TZ }).startOf('day')
+      to = DateTime.fromObject({ year, month: 12, day: 31 }, { zone: TZ }).endOf('day')
     }
 
     const courts = await db.rawQuery(`
