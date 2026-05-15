@@ -156,6 +156,12 @@ const routes = {
     tokens: [{"old":"/api/v1/reservations/:id/audit","type":0,"val":"api","end":""},{"old":"/api/v1/reservations/:id/audit","type":0,"val":"v1","end":""},{"old":"/api/v1/reservations/:id/audit","type":0,"val":"reservations","end":""},{"old":"/api/v1/reservations/:id/audit","type":1,"val":"id","end":""},{"old":"/api/v1/reservations/:id/audit","type":0,"val":"audit","end":""}],
     types: placeholder as Registry['reservations.audit_logs']['types'],
   },
+  'reservations.revert': {
+    methods: ["PATCH"],
+    pattern: '/api/v1/reservations/:id/revert',
+    tokens: [{"old":"/api/v1/reservations/:id/revert","type":0,"val":"api","end":""},{"old":"/api/v1/reservations/:id/revert","type":0,"val":"v1","end":""},{"old":"/api/v1/reservations/:id/revert","type":0,"val":"reservations","end":""},{"old":"/api/v1/reservations/:id/revert","type":1,"val":"id","end":""},{"old":"/api/v1/reservations/:id/revert","type":0,"val":"revert","end":""}],
+    types: placeholder as Registry['reservations.revert']['types'],
+  },
   'users.store': {
     methods: ["POST"],
     pattern: '/api/v1/users',

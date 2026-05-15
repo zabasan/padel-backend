@@ -29,6 +29,7 @@ export type ScannedRoutes = {
     'reservations.pay_total': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'reservations.increment_games': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'reservations.audit_logs': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'reservations.revert': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'users.store': { paramsTuple?: []; params?: {} }
     'users.index': { paramsTuple?: []; params?: {} }
     'users.show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
@@ -99,6 +100,7 @@ export type ScannedRoutes = {
     'reservations.pay_deposit': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'reservations.pay_total': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'reservations.increment_games': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'reservations.revert': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
   }
 }
 declare module '@adonisjs/core/types/http' {

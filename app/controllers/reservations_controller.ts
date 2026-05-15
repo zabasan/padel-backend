@@ -381,6 +381,10 @@ export default class ReservationsController {
     await reservation.load('court')
     await reservation.load('user')
 
+    if (isAdminOrWorker) {
+      await logReservationChange(user.id, reservation.id, 'created', null, 'pending')
+    }
+
     return response.created(reservation)
   }
 
@@ -388,8 +392,8 @@ export default class ReservationsController {
     const user = auth.user!
     const reservation = await Reservation.findOrFail(params.id)
 
-    if (user.role === 'customer' && reservation.userId !== user.id) {
-      return response.forbidden({ message: 'Acceso denegado' })
+    if (user.role === 'customer') {
+      return response.forbidden({ message: 'Sin permisos para modificar reservas' })
     }
     if (user.role === 'professor' && reservation.userId !== user.id) {
       return response.forbidden({ message: 'Acceso denegado' })
@@ -566,6 +570,9 @@ export default class ReservationsController {
     if (Math.abs(totalPrice - Number(reservation.totalPrice)) > 0.001) {
       auditFields['totalPrice'] = { old: String(reservation.totalPrice), new: String(totalPrice) }
     }
+    if (data.classType !== undefined && data.classType !== reservation.classType) {
+      auditFields['classType'] = { old: reservation.classType ?? '', new: data.classType ?? '' }
+    }
 
     reservation.merge({
       courtId,
@@ -588,7 +595,6 @@ export default class ReservationsController {
 
     await reservation.save()
 
-    // Save audit logs
     for (const [field, vals] of Object.entries(auditFields)) {
       await logReservationChange(user.id, reservation.id, field, vals.old, vals.new)
     }
@@ -646,6 +652,8 @@ export default class ReservationsController {
       { reservationId: reservation.id, hiddenDate: targetDateStr },
       { reservationId: reservation.id, hiddenDate: targetDateStr }
     )
+
+    await logReservationChange(user.id, reservation.id, 'hiddenDate', null, targetDateStr)
 
     await reservation.load('hiddenDates')
     const obj = reservation.toJSON()
@@ -819,6 +827,22 @@ export default class ReservationsController {
       .orderBy('created_at', 'desc')
 
     return response.ok(logs)
+  }
+
+  async revert({ params, auth, response }: HttpContext) {
+    const user = auth.user!
+    if (user.role !== 'admin') return response.forbidden({ message: 'Solo administradores pueden revertir reservas' })
+
+    const reservation = await Reservation.findOrFail(params.id)
+    if (reservation.status !== 'cancelled') return response.badRequest({ message: 'Solo se pueden revertir reservas canceladas' })
+
+    reservation.status = 'pending'
+    reservation.cancelledAt = null
+    reservation.cancelledBy = null
+    await reservation.save()
+    await logReservationChange(user.id, reservation.id, 'status', 'cancelled', 'pending')
+
+    return response.ok(reservation)
   }
 
   async auditLogsAll({ auth, response }: HttpContext) {

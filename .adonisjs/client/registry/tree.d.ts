@@ -35,6 +35,7 @@ export interface ApiDefinition {
     payTotal: typeof routes['reservations.pay_total']
     incrementGames: typeof routes['reservations.increment_games']
     auditLogs: typeof routes['reservations.audit_logs']
+    revert: typeof routes['reservations.revert']
     auditLogsAll: typeof routes['reservations.audit_logs_all']
   }
   guestReservations: {
