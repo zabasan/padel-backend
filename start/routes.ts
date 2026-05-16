@@ -27,12 +27,19 @@ router
     // Guest reservation — creates user + reservation atomically, no auth required
     router.post('guest/reservations', [controllers.GuestReservations, 'store'])
 
-    // Authenticated routes
+    // Authenticated routes — accessible even with hasLoggedIn=false (profile/logout/complete)
     router
       .group(() => {
-        // Profile
         router.get('profile', [controllers.Profile, 'show'])
         router.post('logout', [controllers.AccessTokens, 'destroy'])
+        router.put('complete-profile', [controllers.CompleteProfile, 'store'])
+      })
+      .prefix('account')
+      .use(middleware.auth())
+
+    // Authenticated routes — require completed profile for non-customers
+    router
+      .group(() => {
 
         // Courts - write only for admin and worker
         router
@@ -78,6 +85,12 @@ router
 
         router
           .group(() => {
+            router.patch('users/:id/toggle-status', [controllers.Users, 'toggleStatus'])
+          })
+          .use(middleware.role({ roles: ['admin'] }))
+
+        router
+          .group(() => {
             router.delete('users/:id', [controllers.Users, 'destroy'])
             router.get('stats', [controllers.Stats, 'index'])
             router.put('settings', [controllers.Settings, 'update'])
@@ -87,5 +100,6 @@ router
           .use(middleware.role({ roles: ['admin'] }))
       })
       .use(middleware.auth())
+      .use(middleware.profileComplete())
   })
   .prefix('/api/v1')

@@ -44,12 +44,16 @@ export interface ApiDefinition {
   profile: {
     show: typeof routes['profile.show']
   }
+  completeProfile: {
+    store: typeof routes['complete_profile.store']
+  }
   users: {
     store: typeof routes['users.store']
     index: typeof routes['users.index']
     show: typeof routes['users.show']
     update: typeof routes['users.update']
     resetLogin: typeof routes['users.reset_login']
+    toggleStatus: typeof routes['users.toggle_status']
     destroy: typeof routes['users.destroy']
   }
   stats: {

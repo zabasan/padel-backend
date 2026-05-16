@@ -13,6 +13,7 @@ export type ScannedRoutes = {
     'guest_reservations.store': { paramsTuple?: []; params?: {} }
     'profile.show': { paramsTuple?: []; params?: {} }
     'access_tokens.destroy': { paramsTuple?: []; params?: {} }
+    'complete_profile.store': { paramsTuple?: []; params?: {} }
     'courts.store': { paramsTuple?: []; params?: {} }
     'courts.update': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'courts.destroy': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
@@ -35,6 +36,7 @@ export type ScannedRoutes = {
     'users.show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'users.update': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'users.reset_login': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'users.toggle_status': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'users.destroy': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'stats.index': { paramsTuple?: []; params?: {} }
     'settings.update': { paramsTuple?: []; params?: {} }
@@ -82,6 +84,7 @@ export type ScannedRoutes = {
     'users.reset_login': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
   }
   PUT: {
+    'complete_profile.store': { paramsTuple?: []; params?: {} }
     'courts.update': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'courts.update_price_ranges': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'reservations.update': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
@@ -101,6 +104,7 @@ export type ScannedRoutes = {
     'reservations.pay_total': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'reservations.increment_games': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'reservations.revert': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'users.toggle_status': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
   }
 }
 declare module '@adonisjs/core/types/http' {

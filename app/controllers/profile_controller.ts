@@ -9,6 +9,7 @@ export default class ProfileController {
       email: user.email,
       role: user.role,
       phone: user.phone,
+      hasLoggedIn: Boolean(user.hasLoggedIn),
     }
   }
 }

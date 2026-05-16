@@ -25,10 +25,17 @@ export default class UsersController {
       vine.compile(vine.object({
         fullName: vine.string().trim(),
         phone: vine.string().trim().unique({ table: 'users', column: 'phone' }),
+        email: vine.string().email().optional(),
         role: vine.enum(ROLES).optional(),
         padelCategory: vine.enum(PADEL_CATEGORIES).optional().nullable(),
       }))
     )
+
+    const role = data.role || 'customer'
+
+    if (role !== 'customer' && !data.email) {
+      return response.unprocessableEntity({ message: 'El email es obligatorio para empleados, profesores y administradores' })
+    }
 
     const password = await hash.make(data.phone)
 
@@ -36,8 +43,8 @@ export default class UsersController {
       fullName: data.fullName,
       phone: data.phone,
       password,
-      role: data.role || 'customer',
-      email: `${data.phone}@padel.temp`,
+      role,
+      email: data.email || `${data.phone}@padel.temp`,
       hasLoggedIn: false,
       padelCategory: data.padelCategory ?? null,
     })
@@ -65,7 +72,7 @@ export default class UsersController {
 
   async index({ request, response }: HttpContext) {
     const roleFilter = request.input('role')
-    let query = User.query().select(['id', 'full_name', 'email', 'role', 'phone', 'padel_category', 'created_at'])
+    let query = User.query().select(['id', 'full_name', 'email', 'role', 'status', 'phone', 'padel_category', 'created_at'])
     if (roleFilter) {
       query = query.where('role', roleFilter)
     }
@@ -112,7 +119,23 @@ export default class UsersController {
       )
     }
 
-    return response.ok({ id: user.id, fullName: user.fullName, email: user.email, role: user.role, phone: user.phone, padelCategory: user.padelCategory, hasLoggedIn: user.hasLoggedIn })
+    return response.ok({ id: user.id, fullName: user.fullName, email: user.email, role: user.role, phone: user.phone, padelCategory: user.padelCategory, hasLoggedIn: Boolean(user.hasLoggedIn) })
+  }
+
+  async toggleStatus({ params, auth, response }: HttpContext) {
+    const performer = auth.user!
+    const user = await User.findOrFail(params.id)
+    const oldStatus = user.status ?? 'active'
+    user.status = oldStatus === 'active' ? 'inactive' : 'active'
+    await user.save()
+    await UserAuditLog.create({
+      performedBy: performer.id,
+      targetUserId: user.id,
+      field: 'status',
+      oldValue: oldStatus,
+      newValue: user.status,
+    })
+    return response.ok({ id: user.id, status: user.status })
   }
 
   async destroy({ params, response }: HttpContext) {

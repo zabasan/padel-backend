@@ -48,6 +48,10 @@ export default class GuestReservationsController {
       .orWhere('phone', 'like', `%${phone.slice(-8)}`)
       .first()
 
+    if (user && (user.status ?? 'active') === 'inactive') {
+      return response.forbidden({ message: 'Tu cuenta está desactivada. Contactá al administrador.' })
+    }
+
     if (!user) {
       user = await User.create({
         fullName,

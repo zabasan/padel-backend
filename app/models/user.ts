@@ -13,6 +13,9 @@ export default class User extends UserSchema {
   declare role: 'admin' | 'worker' | 'customer' | 'professor'
 
   @column()
+  declare status: 'active' | 'inactive'
+
+  @column()
   declare padelCategory: string | null
 
   @beforeSave()

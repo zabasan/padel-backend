@@ -93,7 +93,7 @@ export interface Registry {
   }
   'profile.show': {
     methods: ["GET","HEAD"]
-    pattern: '/api/v1/profile'
+    pattern: '/api/v1/account/profile'
     types: {
       body: {}
       paramsTuple: []
@@ -105,7 +105,7 @@ export interface Registry {
   }
   'access_tokens.destroy': {
     methods: ["POST"]
-    pattern: '/api/v1/logout'
+    pattern: '/api/v1/account/logout'
     types: {
       body: {}
       paramsTuple: []
@@ -113,6 +113,18 @@ export interface Registry {
       query: {}
       response: ExtractResponse<Awaited<ReturnType<import('#controllers/access_tokens_controller').default['destroy']>>>
       errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/access_tokens_controller').default['destroy']>>>
+    }
+  }
+  'complete_profile.store': {
+    methods: ["PUT"]
+    pattern: '/api/v1/account/complete-profile'
+    types: {
+      body: ExtractBody<InferInput<(typeof import('@vinejs/vine').default)['compile']>|InferInput<(typeof import('@vinejs/vine').default)['object']>|InferInput<(typeof import('@vinejs/vine').default)['string()']['minLength']>>
+      paramsTuple: []
+      params: {}
+      query: ExtractQuery<InferInput<(typeof import('@vinejs/vine').default)['compile']>|InferInput<(typeof import('@vinejs/vine').default)['object']>|InferInput<(typeof import('@vinejs/vine').default)['string()']['minLength']>>
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/complete_profile_controller').default['store']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/complete_profile_controller').default['store']>>> | { status: 422; response: { errors: SimpleError[] } }
     }
   }
   'courts.store': {
@@ -377,6 +389,18 @@ export interface Registry {
       query: {}
       response: ExtractResponse<Awaited<ReturnType<import('#controllers/users_controller').default['resetLogin']>>>
       errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/users_controller').default['resetLogin']>>>
+    }
+  }
+  'users.toggle_status': {
+    methods: ["PATCH"]
+    pattern: '/api/v1/users/:id/toggle-status'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/users_controller').default['toggleStatus']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/users_controller').default['toggleStatus']>>>
     }
   }
   'users.destroy': {

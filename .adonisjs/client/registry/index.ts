@@ -50,15 +50,21 @@ const routes = {
   },
   'profile.show': {
     methods: ["GET","HEAD"],
-    pattern: '/api/v1/profile',
-    tokens: [{"old":"/api/v1/profile","type":0,"val":"api","end":""},{"old":"/api/v1/profile","type":0,"val":"v1","end":""},{"old":"/api/v1/profile","type":0,"val":"profile","end":""}],
+    pattern: '/api/v1/account/profile',
+    tokens: [{"old":"/api/v1/account/profile","type":0,"val":"api","end":""},{"old":"/api/v1/account/profile","type":0,"val":"v1","end":""},{"old":"/api/v1/account/profile","type":0,"val":"account","end":""},{"old":"/api/v1/account/profile","type":0,"val":"profile","end":""}],
     types: placeholder as Registry['profile.show']['types'],
   },
   'access_tokens.destroy': {
     methods: ["POST"],
-    pattern: '/api/v1/logout',
-    tokens: [{"old":"/api/v1/logout","type":0,"val":"api","end":""},{"old":"/api/v1/logout","type":0,"val":"v1","end":""},{"old":"/api/v1/logout","type":0,"val":"logout","end":""}],
+    pattern: '/api/v1/account/logout',
+    tokens: [{"old":"/api/v1/account/logout","type":0,"val":"api","end":""},{"old":"/api/v1/account/logout","type":0,"val":"v1","end":""},{"old":"/api/v1/account/logout","type":0,"val":"account","end":""},{"old":"/api/v1/account/logout","type":0,"val":"logout","end":""}],
     types: placeholder as Registry['access_tokens.destroy']['types'],
+  },
+  'complete_profile.store': {
+    methods: ["PUT"],
+    pattern: '/api/v1/account/complete-profile',
+    tokens: [{"old":"/api/v1/account/complete-profile","type":0,"val":"api","end":""},{"old":"/api/v1/account/complete-profile","type":0,"val":"v1","end":""},{"old":"/api/v1/account/complete-profile","type":0,"val":"account","end":""},{"old":"/api/v1/account/complete-profile","type":0,"val":"complete-profile","end":""}],
+    types: placeholder as Registry['complete_profile.store']['types'],
   },
   'courts.store': {
     methods: ["POST"],
@@ -191,6 +197,12 @@ const routes = {
     pattern: '/api/v1/users/:id/reset-login',
     tokens: [{"old":"/api/v1/users/:id/reset-login","type":0,"val":"api","end":""},{"old":"/api/v1/users/:id/reset-login","type":0,"val":"v1","end":""},{"old":"/api/v1/users/:id/reset-login","type":0,"val":"users","end":""},{"old":"/api/v1/users/:id/reset-login","type":1,"val":"id","end":""},{"old":"/api/v1/users/:id/reset-login","type":0,"val":"reset-login","end":""}],
     types: placeholder as Registry['users.reset_login']['types'],
+  },
+  'users.toggle_status': {
+    methods: ["PATCH"],
+    pattern: '/api/v1/users/:id/toggle-status',
+    tokens: [{"old":"/api/v1/users/:id/toggle-status","type":0,"val":"api","end":""},{"old":"/api/v1/users/:id/toggle-status","type":0,"val":"v1","end":""},{"old":"/api/v1/users/:id/toggle-status","type":0,"val":"users","end":""},{"old":"/api/v1/users/:id/toggle-status","type":1,"val":"id","end":""},{"old":"/api/v1/users/:id/toggle-status","type":0,"val":"toggle-status","end":""}],
+    types: placeholder as Registry['users.toggle_status']['types'],
   },
   'users.destroy': {
     methods: ["DELETE"],

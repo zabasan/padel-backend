@@ -4,7 +4,7 @@ import hash from '@adonisjs/core/services/hash'
 import { errors } from '@adonisjs/auth'
 
 function serializeUser(user: User) {
-  return { id: user.id, fullName: user.fullName, email: user.email, role: user.role, phone: user.phone, hasLoggedIn: user.hasLoggedIn }
+  return { id: user.id, fullName: user.fullName, email: user.email, role: user.role, phone: user.phone, hasLoggedIn: Boolean(user.hasLoggedIn) }
 }
 
 export default class AccessTokensController {
@@ -59,6 +59,10 @@ export default class AccessTokensController {
       if (!isValid) {
         throw new errors.E_INVALID_CREDENTIALS('Credenciales inválidas')
       }
+    }
+
+    if ((user.status ?? 'active') === 'inactive') {
+      throw new errors.E_INVALID_CREDENTIALS('Tu cuenta está desactivada. Contactá al administrador.')
     }
 
     const token = await User.accessTokens.create(user)
