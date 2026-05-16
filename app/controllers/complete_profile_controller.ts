@@ -1,6 +1,5 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import vine, { SimpleMessagesProvider } from '@vinejs/vine'
-import hash from '@adonisjs/core/services/hash'
 
 export default class CompleteProfileController {
   async store({ auth, request, response }: HttpContext) {
@@ -23,7 +22,7 @@ export default class CompleteProfileController {
       }
     )
 
-    user.password = await hash.make(data.password)
+    user.password = data.password
     if (data.email) user.email = data.email
     user.hasLoggedIn = true
     await user.save()
