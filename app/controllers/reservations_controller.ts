@@ -351,6 +351,22 @@ export default class ReservationsController {
     let totalPrice: number
     if (data.customPrice != null && (isProfessor || targetIsProfessor || isAdminOrWorker)) {
       totalPrice = data.customPrice
+    } else if (targetIsProfessor || isProfessor) {
+      const rows2 = await Setting.all()
+      const cfg2: Record<string, string | null> = {}
+      for (const r of rows2) cfg2[r.key] = r.value
+      const isWeekend = startTime.weekday >= 6
+      const classType = data.classType ?? 'individual'
+      let professorPrice: number
+      if (classType === 'grupal') {
+        professorPrice = cfg2['professorPriceGroup'] != null ? Number(cfg2['professorPriceGroup']) : 15000
+      } else if (isWeekend) {
+        professorPrice = cfg2['professorPriceIndividualWeekend'] != null ? Number(cfg2['professorPriceIndividualWeekend'])
+          : (cfg2['professorPriceIndividual'] != null ? Number(cfg2['professorPriceIndividual']) : 12000)
+      } else {
+        professorPrice = cfg2['professorPriceIndividual'] != null ? Number(cfg2['professorPriceIndividual']) : 12000
+      }
+      totalPrice = professorPrice * (duration / 60)
     } else {
       totalPrice = calculatePrice(court, court.priceRanges, startTime, endTime)
     }
@@ -523,6 +539,22 @@ export default class ReservationsController {
     let totalPrice: number
     if (data.customPrice != null && (isAdminOrWorker || targetIsProfessor)) {
       totalPrice = data.customPrice
+    } else if (targetIsProfessor) {
+      const rows2 = await Setting.all()
+      const cfg2: Record<string, string | null> = {}
+      for (const r of rows2) cfg2[r.key] = r.value
+      const isWeekend = startTime.weekday >= 6
+      const classType = data.classType ?? reservation.classType ?? 'individual'
+      let professorPrice: number
+      if (classType === 'grupal') {
+        professorPrice = cfg2['professorPriceGroup'] != null ? Number(cfg2['professorPriceGroup']) : 15000
+      } else if (isWeekend) {
+        professorPrice = cfg2['professorPriceIndividualWeekend'] != null ? Number(cfg2['professorPriceIndividualWeekend'])
+          : (cfg2['professorPriceIndividual'] != null ? Number(cfg2['professorPriceIndividual']) : 12000)
+      } else {
+        professorPrice = cfg2['professorPriceIndividual'] != null ? Number(cfg2['professorPriceIndividual']) : 12000
+      }
+      totalPrice = professorPrice * (duration / 60)
     } else {
       totalPrice = calculatePrice(court, court.priceRanges, startTime, endTime)
     }
