@@ -366,7 +366,7 @@ export default class ReservationsController {
       } else {
         professorPrice = cfg2['professorPriceIndividual'] != null ? Number(cfg2['professorPriceIndividual']) : 12000
       }
-      totalPrice = professorPrice * (duration / 60)
+      totalPrice = professorPrice * (data.duration / 60)
     } else {
       totalPrice = calculatePrice(court, court.priceRanges, startTime, endTime)
     }
