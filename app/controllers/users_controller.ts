@@ -2,7 +2,6 @@ import type { HttpContext } from '@adonisjs/core/http'
 import User from '#models/user'
 import UserAuditLog from '#models/user_audit_log'
 import vine from '@vinejs/vine'
-import hash from '@adonisjs/core/services/hash'
 
 const PADEL_CATEGORIES = ['C1','C2','C3','C4','C5','C6','C7','C8','C9'] as const
 const ROLES = ['admin', 'worker', 'customer', 'professor'] as const
@@ -37,12 +36,10 @@ export default class UsersController {
       return response.unprocessableEntity({ message: 'El email es obligatorio para empleados, profesores y administradores' })
     }
 
-    const password = await hash.make(data.phone)
-
     const user = await User.create({
       fullName: data.fullName,
       phone: data.phone,
-      password,
+      password: data.phone,
       role,
       email: data.email || `${data.phone}@padel.temp`,
       hasLoggedIn: false,
@@ -64,7 +61,7 @@ export default class UsersController {
     const user = await User.findOrFail(params.id)
     user.hasLoggedIn = false
     if (user.phone) {
-      user.password = await hash.make(user.phone)
+      user.password = user.phone
     }
     await user.save()
     return response.ok({ message: 'Login reseteado correctamente', phone: user.phone })
