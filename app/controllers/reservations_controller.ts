@@ -792,7 +792,8 @@ export default class ReservationsController {
     const date = request.input('date')
     if (!courtId || !date) return response.badRequest({ message: 'Se requiere court_id y date' })
 
-    const queryDate = DateTime.fromISO(date)
+    const TZ = 'America/Argentina/Buenos_Aires'
+    const queryDate = DateTime.fromISO(date, { zone: TZ })
     const start = queryDate.startOf('day')
     const end = queryDate.endOf('day')
     const queryWeekday = queryDate.weekday
@@ -814,7 +815,7 @@ export default class ReservationsController {
       .preload('hiddenDates')
 
     const activeRecurring = allRecurring.filter(r => {
-      if (r.startTime.weekday !== queryWeekday) return false
+      if (r.startTime.setZone(TZ).weekday !== queryWeekday) return false
       const hiddenDates = (r.hiddenDates ?? []).map(hd => toDateStr(hd.hiddenDate))
       if (hiddenDates.includes(queryDateStr)) return false
       return true
