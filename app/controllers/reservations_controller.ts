@@ -155,8 +155,8 @@ export default class ReservationsController {
       if (user.role === 'customer' || user.role === 'professor') {
         summaryQuery = summaryQuery.where('user_id', user.id)
       }
-      if (from) summaryQuery = summaryQuery.where('start_time', '>=', DateTime.fromISO(from).toSQL()!)
-      if (to) summaryQuery = summaryQuery.where('start_time', '<=', DateTime.fromISO(to).toSQL()!)
+      if (from) summaryQuery = summaryQuery.where('start_time', '>=', DateTime.fromISO(from).toUTC().toSQL()!)
+      if (to) summaryQuery = summaryQuery.where('start_time', '<=', DateTime.fromISO(to).toUTC().toSQL()!)
       const reservations = await summaryQuery
       return response.ok(reservations)
     }
@@ -168,10 +168,10 @@ export default class ReservationsController {
     }
 
     if (from) {
-      const fromSQL = DateTime.fromISO(from).toSQL()!
+      const fromSQL = DateTime.fromISO(from).toUTC().toSQL()!
       query = query.where(q => q.where('start_time', '>=', fromSQL).orWhere('is_recurring', true))
     }
-    if (to) query = query.where('start_time', '<=', DateTime.fromISO(to).toSQL()!)
+    if (to) query = query.where('start_time', '<=', DateTime.fromISO(to).toUTC().toSQL()!)
 
     const reservations = await query.orderBy('start_time', 'asc')
 
@@ -228,10 +228,10 @@ export default class ReservationsController {
     const startTime = DateTime.fromISO(data.startTime)
     const endTime = startTime.plus({ minutes: data.duration })
 
-    const endSQL = (endTime.hour === 0 && endTime.minute === 0)
-      ? DateTime.fromISO(data.startTime).endOf('day').toSQL()!
-      : endTime.toSQL()!
-    const startSQL = startTime.toSQL()!
+    const endSQL = (endTime.toUTC().hour === 0 && endTime.toUTC().minute === 0)
+      ? DateTime.fromISO(data.startTime).toUTC().endOf('day').toSQL()!
+      : endTime.toUTC().toSQL()!
+    const startSQL = startTime.toUTC().toSQL()!
 
     // Validate custom duration for padel (professors only) and football (admin/worker only)
     const isPadelCourt = court.type === 'padel'
@@ -460,10 +460,10 @@ export default class ReservationsController {
 
     // Conflict checks (skip for recurring reservations being edited)
     if (!reservation.isRecurring) {
-      const endSQLc = (endTime.hour === 0 && endTime.minute === 0)
-        ? startTime.endOf('day').toSQL()!
-        : endTime.toSQL()!
-      const startSQLc = startTime.toSQL()!
+      const endSQLc = (endTime.toUTC().hour === 0 && endTime.toUTC().minute === 0)
+        ? startTime.toUTC().endOf('day').toSQL()!
+        : endTime.toUTC().toSQL()!
+      const startSQLc = startTime.toUTC().toSQL()!
 
       const directConflict = await Reservation.query()
         .where('court_id', courtId)
@@ -803,15 +803,15 @@ export default class ReservationsController {
       .where('court_id', courtId)
       .whereNot('status', 'cancelled')
       .where('is_recurring', false)
-      .where('start_time', '>=', start.toSQL()!)
-      .where('start_time', '<=', end.toSQL()!)
+      .where('start_time', '>=', start.toUTC().toSQL()!)
+      .where('start_time', '<=', end.toUTC().toSQL()!)
       .orderBy('start_time', 'asc')
 
     const allRecurring = await Reservation.query()
       .where('court_id', courtId)
       .whereNot('status', 'cancelled')
       .where('is_recurring', true)
-      .where('start_time', '<=', end.toSQL()!)
+      .where('start_time', '<=', end.toUTC().toSQL()!)
       .preload('hiddenDates')
 
     const activeRecurring = allRecurring.filter(r => {
