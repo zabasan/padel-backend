@@ -259,8 +259,11 @@ export default class ReservationsController {
       for (const r of rows) cfg[r.key] = r.value
       const profStartHour = cfg['professorStartHour'] != null ? Number(cfg['professorStartHour']) : 8
       const profEndHour = cfg['professorEndHour'] != null ? Number(cfg['professorEndHour']) : 18
-      const startHour = startTime.hour + startTime.minute / 60
-      const endHour = endTime.hour + endTime.minute / 60
+      const ART_TZ = 'America/Argentina/Buenos_Aires'
+      const startART = startTime.setZone(ART_TZ)
+      const endART = endTime.setZone(ART_TZ)
+      const startHour = startART.hour + startART.minute / 60
+      const endHour = endART.hour + endART.minute / 60
       if (startHour < profStartHour) {
         return response.badRequest({ message: `Las reservas de profesores deben comenzar desde las ${String(profStartHour).padStart(2,'0')}:00` })
       }
