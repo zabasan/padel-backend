@@ -2,6 +2,7 @@ import type { HttpContext } from '@adonisjs/core/http'
 import Reservation from '#models/reservation'
 import ReservationHiddenDate from '#models/reservation_hidden_date'
 import ReservationAuditLog from '#models/reservation_audit_log'
+import ReservationPayment from '#models/reservation_payment'
 import Court from '#models/court'
 import CourtPriceRange from '#models/court_price_range'
 import Setting from '#models/setting'
@@ -46,9 +47,13 @@ const editReservationValidator = vine.compile(
 )
 
 // Calculate price for football courts: hours × pricePerHour
+const ART_TZ = 'America/Argentina/Buenos_Aires'
+
 function calculateFootballPrice(priceRanges: CourtPriceRange[], defaultPrice: number, start: DateTime, end: DateTime): number {
-  const startH = start.hour + start.minute / 60
-  const endH = (end.hour === 0 && end.minute === 0) ? 24 : end.hour + end.minute / 60
+  const startART = start.setZone(ART_TZ)
+  const endART = end.setZone(ART_TZ)
+  const startH = startART.hour + startART.minute / 60
+  const endH = (endART.hour === 0 && endART.minute === 0) ? 24 : endART.hour + endART.minute / 60
   const hours = endH - startH
 
   if (priceRanges.length === 0) return defaultPrice * hours
@@ -69,7 +74,8 @@ function calculateFootballPrice(priceRanges: CourtPriceRange[], defaultPrice: nu
 function calculatePadelPrice(priceRanges: CourtPriceRange[], defaultPrice: number, start: DateTime, durationMinutes: number): number {
   if (priceRanges.length === 0) return defaultPrice * (durationMinutes / 60)
 
-  const startH = start.hour + start.minute / 60
+  const startART = start.setZone(ART_TZ)
+  const startH = startART.hour + startART.minute / 60
   const range = priceRanges.find(r => startH >= r.startHour && startH < r.endHour)
   if (!range) return defaultPrice * (durationMinutes / 60)
 
@@ -96,7 +102,8 @@ function applyDiscount(price: number, discountPct: number): number {
 }
 
 function timeInMinutes(dt: DateTime): number {
-  return dt.hour * 60 + dt.minute
+  const art = dt.setZone(ART_TZ)
+  return art.hour * 60 + art.minute
 }
 
 function toDateStr(val: unknown): string | null {
@@ -108,20 +115,22 @@ function toDateStr(val: unknown): string | null {
 }
 
 function hasRecurringConflict(reservations: Reservation[], startTime: DateTime, endTime: DateTime): boolean {
-  const startWeekday = startTime.weekday
+  const startART = startTime.setZone(ART_TZ)
+  const endART = endTime.setZone(ART_TZ)
+  const startWeekday = startART.weekday
   const startMin = timeInMinutes(startTime)
-  const endMin = (endTime.hour === 0 && endTime.minute === 0) ? 24 * 60 : timeInMinutes(endTime)
-  const startDateISO = startTime.toISODate()!
+  const endMin = (endART.hour === 0 && endART.minute === 0) ? 24 * 60 : timeInMinutes(endTime)
+  const startDateISO = startART.toISODate()!
 
   for (const r of reservations) {
-    if (r.startTime.weekday !== startWeekday) continue
-    // Skip recurring reservations that haven't started yet
-    const rStartDateISO = r.startTime.toISODate()!
+    const rStartART = r.startTime.setZone(ART_TZ)
+    const rEndART = r.endTime.setZone(ART_TZ)
+    if (rStartART.weekday !== startWeekday) continue
+    const rStartDateISO = rStartART.toISODate()!
     if (startDateISO < rStartDateISO) continue
     const rStartMin = timeInMinutes(r.startTime)
-    const rEndMin = (r.endTime.hour === 0 && r.endTime.minute === 0) ? 24 * 60 : timeInMinutes(r.endTime)
+    const rEndMin = (rEndART.hour === 0 && rEndART.minute === 0) ? 24 * 60 : timeInMinutes(r.endTime)
     if (startMin >= rEndMin || endMin <= rStartMin) continue
-    // Skip if this specific date is hidden in the pivot table
     const hiddenDates = (r.hiddenDates ?? []).map(hd => toDateStr(hd.hiddenDate))
     if (hiddenDates.includes(startDateISO)) continue
     return true
@@ -228,8 +237,9 @@ export default class ReservationsController {
     const startTime = DateTime.fromISO(data.startTime)
     const endTime = startTime.plus({ minutes: data.duration })
 
-    const endSQL = (endTime.toUTC().hour === 0 && endTime.toUTC().minute === 0)
-      ? DateTime.fromISO(data.startTime).toUTC().endOf('day').toSQL()!
+    const endTimeART = endTime.setZone(ART_TZ)
+    const endSQL = (endTimeART.hour === 0 && endTimeART.minute === 0)
+      ? endTime.toUTC().endOf('day').toSQL()!
       : endTime.toUTC().toSQL()!
     const startSQL = startTime.toUTC().toSQL()!
 
@@ -259,7 +269,6 @@ export default class ReservationsController {
       for (const r of rows) cfg[r.key] = r.value
       const profStartHour = cfg['professorStartHour'] != null ? Number(cfg['professorStartHour']) : 8
       const profEndHour = cfg['professorEndHour'] != null ? Number(cfg['professorEndHour']) : 18
-      const ART_TZ = 'America/Argentina/Buenos_Aires'
       const startART = startTime.setZone(ART_TZ)
       const endART = endTime.setZone(ART_TZ)
       const startHour = startART.hour + startART.minute / 60
@@ -272,8 +281,8 @@ export default class ReservationsController {
       }
     }
 
-    // Validate duration
-    if (isPadelCourt && !targetIsProfessor && !isProfessor) {
+    // Validate duration — admins bypass duration restrictions
+    if (isPadelCourt && !targetIsProfessor && !isProfessor && !isAdminOrWorker) {
       if (![60, 90, 120].includes(data.duration)) {
         return response.badRequest({ message: 'Duración inválida para cancha de pádel' })
       }
@@ -358,7 +367,7 @@ export default class ReservationsController {
       const rows2 = await Setting.all()
       const cfg2: Record<string, string | null> = {}
       for (const r of rows2) cfg2[r.key] = r.value
-      const isWeekend = startTime.weekday >= 6
+      const isWeekend = startTime.setZone(ART_TZ).weekday >= 6
       const classType = data.classType ?? 'individual'
       let professorPrice: number
       if (classType === 'grupal') {
@@ -463,8 +472,9 @@ export default class ReservationsController {
 
     // Conflict checks (skip for recurring reservations being edited)
     if (!reservation.isRecurring) {
-      const endSQLc = (endTime.toUTC().hour === 0 && endTime.toUTC().minute === 0)
-        ? startTime.toUTC().endOf('day').toSQL()!
+      const endTimeCART = endTime.setZone(ART_TZ)
+      const endSQLc = (endTimeCART.hour === 0 && endTimeCART.minute === 0)
+        ? endTime.toUTC().endOf('day').toSQL()!
         : endTime.toUTC().toSQL()!
       const startSQLc = startTime.toUTC().toSQL()!
 
@@ -546,7 +556,7 @@ export default class ReservationsController {
       const rows2 = await Setting.all()
       const cfg2: Record<string, string | null> = {}
       for (const r of rows2) cfg2[r.key] = r.value
-      const isWeekend = startTime.weekday >= 6
+      const isWeekend = startTime.setZone(ART_TZ).weekday >= 6
       const classType = data.classType ?? reservation.classType ?? 'individual'
       let professorPrice: number
       if (classType === 'grupal') {
@@ -676,8 +686,8 @@ export default class ReservationsController {
     if (dateParam) {
       targetDateStr = dateParam
     } else {
-      const startWeekday = reservation.startTime.weekday
-      let next = DateTime.now().startOf('day').plus({ days: 1 })
+      const startWeekday = reservation.startTime.setZone(ART_TZ).weekday
+      let next = DateTime.now().setZone(ART_TZ).startOf('day').plus({ days: 1 })
       while (next.weekday !== startWeekday) next = next.plus({ days: 1 })
       targetDateStr = next.toISODate()!
     }
@@ -704,12 +714,13 @@ export default class ReservationsController {
     if (!reservation.isRecurring) return response.badRequest({ message: 'La reserva no es recurrente' })
 
     // Idempotency: find this week's occurrence datetime and skip if already incremented
-    const now = DateTime.now()
-    const weekday = reservation.startTime.weekday // 1=Mon ... 7=Sun
+    const now = DateTime.now().setZone(ART_TZ)
+    const resStartART = reservation.startTime.setZone(ART_TZ)
+    const weekday = resStartART.weekday // 1=Mon ... 7=Sun
     // Find the most recent past occurrence (same weekday + time)
     let occurrence = now.set({
-      hour: reservation.startTime.hour,
-      minute: reservation.startTime.minute,
+      hour: resStartART.hour,
+      minute: resStartART.minute,
       second: 0,
       millisecond: 0,
     })
@@ -750,6 +761,11 @@ export default class ReservationsController {
     if (reservation.depositPaid) return response.badRequest({ message: 'La seña ya fue registrada' })
 
     const receipt = request.input('receipt', null)
+    const efectivo = Number(request.input('efectivo', 0)) || 0
+    const transferencia = Number(request.input('transferencia', 0)) || 0
+    const postnet = Number(request.input('postnet', 0)) || 0
+    const payTotal = Math.round((efectivo + transferencia + postnet) * 100) / 100
+
     const oldStatus = reservation.status
     reservation.depositPaid = true
     reservation.depositPaidAt = DateTime.now()
@@ -761,6 +777,19 @@ export default class ReservationsController {
     }
     if (receipt) reservation.depositReceipt = receipt
     await reservation.save()
+
+    // Record payment breakdown
+    await ReservationPayment.create({
+      reservationId: reservation.id,
+      type: 'deposit',
+      efectivo,
+      transferencia,
+      postnet,
+      total: payTotal,
+      paidBy: user.id,
+      receipt: receipt || null,
+    })
+
     if (oldStatus !== 'confirmed') {
       await logReservationChange(user.id, reservation.id, 'status', oldStatus, 'confirmed')
     }
@@ -781,12 +810,30 @@ export default class ReservationsController {
     if (reservation.totalPaid) return response.badRequest({ message: 'El pago total ya fue registrado' })
 
     const receipt = request.input('receipt', null)
+    const efectivo = Number(request.input('efectivo', 0)) || 0
+    const transferencia = Number(request.input('transferencia', 0)) || 0
+    const postnet = Number(request.input('postnet', 0)) || 0
+    const payTotal = Math.round((efectivo + transferencia + postnet) * 100) / 100
+
     reservation.totalPaid = true
     reservation.totalPaidAt = DateTime.now()
     reservation.totalPaidBy = user.id
     reservation.totalPaidCount = (reservation.totalPaidCount || 0) + 1
     if (receipt) reservation.totalReceipt = receipt
     await reservation.save()
+
+    // Record payment breakdown
+    await ReservationPayment.create({
+      reservationId: reservation.id,
+      type: 'total',
+      efectivo,
+      transferencia,
+      postnet,
+      total: payTotal,
+      paidBy: user.id,
+      receipt: receipt || null,
+    })
+
     return response.ok(reservation)
   }
 
@@ -795,8 +842,7 @@ export default class ReservationsController {
     const date = request.input('date')
     if (!courtId || !date) return response.badRequest({ message: 'Se requiere court_id y date' })
 
-    const TZ = 'America/Argentina/Buenos_Aires'
-    const queryDate = DateTime.fromISO(date, { zone: TZ })
+    const queryDate = DateTime.fromISO(date, { zone: ART_TZ })
     const start = queryDate.startOf('day')
     const end = queryDate.endOf('day')
     const queryWeekday = queryDate.weekday
@@ -818,7 +864,7 @@ export default class ReservationsController {
       .preload('hiddenDates')
 
     const activeRecurring = allRecurring.filter(r => {
-      if (r.startTime.setZone(TZ).weekday !== queryWeekday) return false
+      if (r.startTime.setZone(ART_TZ).weekday !== queryWeekday) return false
       const hiddenDates = (r.hiddenDates ?? []).map(hd => toDateStr(hd.hiddenDate))
       if (hiddenDates.includes(queryDateStr)) return false
       return true

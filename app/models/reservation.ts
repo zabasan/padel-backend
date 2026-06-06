@@ -4,6 +4,7 @@ import { DateTime } from 'luxon'
 import Court from '#models/court'
 import User from '#models/user'
 import ReservationHiddenDate from '#models/reservation_hidden_date'
+import ReservationPayment from '#models/reservation_payment'
 
 export default class Reservation extends BaseModel {
   @column({ isPrimary: true })
@@ -141,4 +142,7 @@ export default class Reservation extends BaseModel {
 
   @hasMany(() => ReservationHiddenDate)
   declare hiddenDates: HasMany<typeof ReservationHiddenDate>
+
+  @hasMany(() => ReservationPayment)
+  declare payments: HasMany<typeof ReservationPayment>
 }

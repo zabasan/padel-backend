@@ -116,6 +116,31 @@ export class ReservationHiddenDateSchema extends BaseModel {
   declare updatedAt: DateTime
 }
 
+export class ReservationPaymentSchema extends BaseModel {
+  static $columns = ['createdAt', 'efectivo', 'id', 'paidBy', 'postnet', 'receipt', 'reservationId', 'total', 'transferencia', 'type'] as const
+  $columns = ReservationPaymentSchema.$columns
+  @column.dateTime({ autoCreate: true })
+  declare createdAt: DateTime
+  @column()
+  declare efectivo: string
+  @column({ isPrimary: true })
+  declare id: number
+  @column()
+  declare paidBy: number
+  @column()
+  declare postnet: string
+  @column()
+  declare receipt: string | null
+  @column()
+  declare reservationId: number
+  @column()
+  declare total: string
+  @column()
+  declare transferencia: string
+  @column()
+  declare type: string
+}
+
 export class ReservationSchema extends BaseModel {
   static $columns = ['cancelledAt', 'cancelledBy', 'classType', 'confirmedAt', 'confirmedBy', 'consecutiveGames', 'consecutiveGamesSnapshot', 'contactPhone', 'courtId', 'createdAt', 'customPrice', 'customerId', 'depositFixedAmount', 'depositPaid', 'depositPaidAt', 'depositPaidBy', 'depositPercentage', 'depositReceipt', 'discountPercentage', 'endTime', 'hiddenFrom', 'hiddenUntil', 'id', 'isRecurring', 'lastIncrementedAt', 'notes', 'startTime', 'status', 'totalPaid', 'totalPaidAt', 'totalPaidBy', 'totalPaidCount', 'totalPrice', 'totalReceipt', 'updatedAt', 'userId'] as const
   $columns = ReservationSchema.$columns

@@ -15,7 +15,7 @@
     "ace": "node --import tsx/esm bin/console.ts",
     "migrate": "node --import tsx/esm bin/console.ts migration:run",
     "seed": "node --import tsx/esm bin/console.ts db:seed",
-    "test": "node --import tsx/esm bin/console.ts test",
+    "test": "NODE_OPTIONS='--import tsx/esm' node --import tsx/esm bin/console.ts test",
     "lint": "eslint .",
     "format": "prettier --write .",
     "typecheck": "tsc --noEmit"

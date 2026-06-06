@@ -18,9 +18,13 @@ const guestReservationValidator = vine.compile(
   })
 )
 
+const ART_TZ = 'America/Argentina/Buenos_Aires'
+
 function calculatePrice(priceRanges: CourtPriceRange[], defaultPrice: number, start: DateTime, end: DateTime): number {
-  const startH = start.hour + start.minute / 60
-  const endH = (end.hour === 0 && end.minute === 0) ? 24 : end.hour + end.minute / 60
+  const startART = start.setZone(ART_TZ)
+  const endART = end.setZone(ART_TZ)
+  const startH = startART.hour + startART.minute / 60
+  const endH = (endART.hour === 0 && endART.minute === 0) ? 24 : endART.hour + endART.minute / 60
   const hours = endH - startH
 
   if (priceRanges.length === 0) return defaultPrice * hours
