@@ -106,6 +106,48 @@ function timeInMinutes(dt: DateTime): number {
   return art.hour * 60 + art.minute
 }
 
+// Returns the effective consecutive games streak, accounting for hidden dates that have
+// already passed since the last increment. A past hidden occurrence breaks the streak.
+function effectiveConsecutiveGames(
+  r: Reservation,
+  hiddenDateStrs: string[]
+): number {
+  if (!hiddenDateStrs.length) return r.consecutiveGames
+
+  const nowART = DateTime.now().setZone(ART_TZ)
+  const resStartART = r.startTime.setZone(ART_TZ)
+  const lastIncremented = r.lastIncrementedAt ? r.lastIncrementedAt.setZone(ART_TZ) : null
+
+  // Find the most recent hidden occurrence that is already in the past
+  let latestBreaker: DateTime | null = null
+  for (const dateStr of hiddenDateStrs) {
+    const hdDt = DateTime.fromISO(dateStr, { zone: ART_TZ }).set({
+      hour: resStartART.hour,
+      minute: resStartART.minute,
+      second: 0,
+      millisecond: 0,
+    })
+    // Only counts as a streak breaker if it's in the past
+    if (hdDt >= nowART) continue
+    // Must be after the last incremented occurrence
+    const afterLast = lastIncremented ? hdDt > lastIncremented : hdDt >= resStartART.startOf('day')
+    if (!afterLast) continue
+    if (!latestBreaker || hdDt > latestBreaker) latestBreaker = hdDt
+  }
+
+  if (!latestBreaker) return r.consecutiveGames
+
+  // Streak broke — count non-hidden occurrences from the breaker onward up to now
+  let streak = 0
+  let cur = latestBreaker.plus({ weeks: 1 })
+  while (cur < nowART) {
+    const dateStr = cur.toISODate()!
+    if (!hiddenDateStrs.includes(dateStr)) streak++
+    cur = cur.plus({ weeks: 1 })
+  }
+  return streak
+}
+
 function toDateStr(val: unknown): string | null {
   if (!val) return null
   if (typeof val === 'string') return val.slice(0, 10)
@@ -192,9 +234,10 @@ export default class ReservationsController {
       obj.hiddenDates = (r.hiddenDates ?? []).map(hd => toDateStr(hd.hiddenDate)).filter(Boolean)
       if (r.isRecurring && promo.enabled && promo.games > 0) {
         const cycle = promo.games + promo.freeGames
-        const posInCycle = r.consecutiveGames % cycle
+        const effectiveGames = effectiveConsecutiveGames(r, obj.hiddenDates)
+        const posInCycle = effectiveGames % cycle
         obj.isFreeGame = posInCycle >= promo.games
-        obj.consecutiveGamesDisplay = r.consecutiveGames
+        obj.consecutiveGamesDisplay = effectiveGames
         obj.freeGamePosition = promo.games
         obj.promoCycle = cycle
       } else {
@@ -698,6 +741,27 @@ export default class ReservationsController {
       { reservationId: reservation.id, hiddenDate: targetDateStr }
     )
 
+    // If this hidden date corresponds to the occurrence that was already incremented,
+    // roll back the consecutive games counter so the promo cycle stays correct.
+    if (reservation.lastIncrementedAt) {
+      const resStartART = reservation.startTime.setZone(ART_TZ)
+      const hiddenDt = DateTime.fromISO(targetDateStr, { zone: ART_TZ }).set({
+        hour: resStartART.hour,
+        minute: resStartART.minute,
+        second: 0,
+        millisecond: 0,
+      })
+      const incrementedDt = reservation.lastIncrementedAt.setZone(ART_TZ)
+      // Same occurrence if lastIncrementedAt falls within the same day as the hidden date
+      if (incrementedDt >= hiddenDt && incrementedDt < hiddenDt.plus({ days: 1 })) {
+        if (reservation.consecutiveGames > 0) {
+          reservation.consecutiveGames -= 1
+        }
+        reservation.lastIncrementedAt = null
+        await reservation.save()
+      }
+    }
+
     await logReservationChange(user.id, reservation.id, 'hiddenDate', null, targetDateStr)
 
     await reservation.load('hiddenDates')
@@ -735,6 +799,22 @@ export default class ReservationsController {
     }
 
     const promo = await getRecurringPromoSettings()
+
+    // Check if a hidden occurrence fell between lastIncrementedAt and now — streak broken
+    await reservation.load('hiddenDates')
+    const lastIncremented = reservation.lastIncrementedAt
+    const streakBroken = (reservation.hiddenDates ?? []).some((hd) => {
+      const hdDt = DateTime.fromISO(
+        typeof hd.hiddenDate === 'string' ? hd.hiddenDate : hd.hiddenDate,
+        { zone: ART_TZ }
+      ).set({ hour: resStartART.hour, minute: resStartART.minute, second: 0, millisecond: 0 })
+      const afterLast = lastIncremented ? hdDt > lastIncremented : hdDt >= resStartART.startOf('day')
+      return afterLast && hdDt < occurrence
+    })
+
+    if (streakBroken) {
+      reservation.consecutiveGames = 0
+    }
 
     reservation.consecutiveGames += 1
     reservation.lastIncrementedAt = now
