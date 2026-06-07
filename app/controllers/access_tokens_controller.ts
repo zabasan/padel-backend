@@ -4,7 +4,7 @@ import hash from '@adonisjs/core/services/hash'
 import { errors } from '@adonisjs/auth'
 
 function serializeUser(user: User) {
-  return { id: user.id, fullName: user.fullName, email: user.email, role: user.role, phone: user.phone, hasLoggedIn: Boolean(user.hasLoggedIn) }
+  return { id: user.id, fullName: user.fullName, email: user.email, role: user.role, phone: user.phone, hasLoggedIn: Boolean(user.hasLoggedIn), isSuperUser: Boolean(user.isSuperUser) }
 }
 
 export default class AccessTokensController {

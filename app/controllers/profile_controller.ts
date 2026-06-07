@@ -10,6 +10,7 @@ export default class ProfileController {
       role: user.role,
       phone: user.phone,
       hasLoggedIn: Boolean(user.hasLoggedIn),
+      isSuperUser: Boolean(user.isSuperUser),
     }
   }
 }

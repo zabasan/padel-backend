@@ -16,6 +16,9 @@ export default class User extends UserSchema {
   declare status: 'active' | 'inactive'
 
   @column()
+  declare isSuperUser: boolean
+
+  @column()
   declare padelCategory: string | null
 
   @beforeSave()

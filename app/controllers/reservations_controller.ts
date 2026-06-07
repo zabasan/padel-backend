@@ -455,8 +455,8 @@ export default class ReservationsController {
       }
     }
 
-    // Block editing past reservations (non-recurring only)
-    if (!reservation.isRecurring && reservation.endTime < DateTime.now()) {
+    // Block editing past reservations (non-recurring only); super users bypass this
+    if (!user.isSuperUser && !reservation.isRecurring && reservation.endTime < DateTime.now()) {
       return response.badRequest({ message: 'No se puede editar una reserva que ya ocurrió' })
     }
 

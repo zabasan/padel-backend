@@ -116,7 +116,7 @@ export default class UsersController {
       )
     }
 
-    return response.ok({ id: user.id, fullName: user.fullName, email: user.email, role: user.role, phone: user.phone, padelCategory: user.padelCategory, hasLoggedIn: Boolean(user.hasLoggedIn) })
+    return response.ok({ id: user.id, fullName: user.fullName, email: user.email, role: user.role, phone: user.phone, padelCategory: user.padelCategory, hasLoggedIn: Boolean(user.hasLoggedIn), isSuperUser: Boolean(user.isSuperUser) })
   }
 
   async toggleStatus({ params, auth, response }: HttpContext) {
