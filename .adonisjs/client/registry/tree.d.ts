@@ -37,6 +37,7 @@ export interface ApiDefinition {
     auditLogs: typeof routes['reservations.audit_logs']
     revert: typeof routes['reservations.revert']
     revertPayment: typeof routes['reservations.revert_payment']
+    revertAllPayments: typeof routes['reservations.revert_all_payments']
     auditLogsAll: typeof routes['reservations.audit_logs_all']
   }
   guestReservations: {

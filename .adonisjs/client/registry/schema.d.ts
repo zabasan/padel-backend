@@ -343,6 +343,18 @@ export interface Registry {
       errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/reservations_controller').default['revertPayment']>>>
     }
   }
+  'reservations.revert_all_payments': {
+    methods: ["DELETE"]
+    pattern: '/api/v1/reservations/:id/payments'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/reservations_controller').default['revertAllPayments']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/reservations_controller').default['revertAllPayments']>>>
+    }
+  }
   'users.store': {
     methods: ["POST"]
     pattern: '/api/v1/users'

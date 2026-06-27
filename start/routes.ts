@@ -70,6 +70,7 @@ router
             router.get('reservations/:id/audit', [controllers.Reservations, 'auditLogs'])
             router.patch('reservations/:id/revert', [controllers.Reservations, 'revert'])
             router.delete('reservations/:id/payments/:paymentId', [controllers.Reservations, 'revertPayment'])
+            router.delete('reservations/:id/payments', [controllers.Reservations, 'revertAllPayments'])
           })
           .use(middleware.role({ roles: ['admin', 'worker'] }))
 

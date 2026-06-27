@@ -1249,6 +1249,45 @@ export default class ReservationsController {
     return response.ok(reservation)
   }
 
+  async revertAllPayments({ params, auth, response }: HttpContext) {
+    const user = auth.user!
+    if (user.role !== 'admin') return response.forbidden({ message: 'Solo administradores pueden revertir pagos' })
+
+    const reservation = await Reservation.findOrFail(params.id)
+    const payments = await ReservationPayment.query().where('reservation_id', reservation.id)
+
+    if (payments.length === 0) return response.badRequest({ message: 'No hay pagos registrados para esta reserva' })
+
+    const auditSummary = JSON.stringify(
+      payments.map(p => ({
+        type: p.type,
+        total: p.total,
+        efectivo: p.efectivo,
+        transferencia: p.transferencia,
+        postnet: p.postnet,
+        occurrenceDate: p.occurrenceDate ?? undefined,
+      }))
+    )
+
+    await ReservationPayment.query().where('reservation_id', reservation.id).delete()
+
+    reservation.depositPaid = false
+    reservation.depositPaidAt = null
+    reservation.depositPaidBy = null
+    reservation.depositReceipt = null
+    reservation.totalPaid = false
+    reservation.totalPaidAt = null
+    reservation.totalPaidBy = null
+    reservation.totalReceipt = null
+    reservation.totalPaidCount = 0
+
+    await reservation.save()
+    await logReservationChange(user.id, reservation.id, 'allPaymentsReverted', auditSummary, null)
+
+    await reservation.load('payments')
+    return response.ok(reservation)
+  }
+
   async auditLogsAll({ auth, response }: HttpContext) {
     const user = auth.user!
     if (user.role !== 'admin') return response.forbidden({ message: 'Sin permisos' })

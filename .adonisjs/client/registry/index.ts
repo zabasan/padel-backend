@@ -174,6 +174,12 @@ const routes = {
     tokens: [{"old":"/api/v1/reservations/:id/payments/:paymentId","type":0,"val":"api","end":""},{"old":"/api/v1/reservations/:id/payments/:paymentId","type":0,"val":"v1","end":""},{"old":"/api/v1/reservations/:id/payments/:paymentId","type":0,"val":"reservations","end":""},{"old":"/api/v1/reservations/:id/payments/:paymentId","type":1,"val":"id","end":""},{"old":"/api/v1/reservations/:id/payments/:paymentId","type":0,"val":"payments","end":""},{"old":"/api/v1/reservations/:id/payments/:paymentId","type":1,"val":"paymentId","end":""}],
     types: placeholder as Registry['reservations.revert_payment']['types'],
   },
+  'reservations.revert_all_payments': {
+    methods: ["DELETE"],
+    pattern: '/api/v1/reservations/:id/payments',
+    tokens: [{"old":"/api/v1/reservations/:id/payments","type":0,"val":"api","end":""},{"old":"/api/v1/reservations/:id/payments","type":0,"val":"v1","end":""},{"old":"/api/v1/reservations/:id/payments","type":0,"val":"reservations","end":""},{"old":"/api/v1/reservations/:id/payments","type":1,"val":"id","end":""},{"old":"/api/v1/reservations/:id/payments","type":0,"val":"payments","end":""}],
+    types: placeholder as Registry['reservations.revert_all_payments']['types'],
+  },
   'users.store': {
     methods: ["POST"],
     pattern: '/api/v1/users',
