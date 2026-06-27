@@ -5,6 +5,8 @@ import ReservationAuditLog from '#models/reservation_audit_log'
 import ReservationPayment from '#models/reservation_payment'
 import Court from '#models/court'
 import CourtPriceRange from '#models/court_price_range'
+import CourtPriceHistory from '#models/court_price_history'
+import ProfessorPriceHistory from '#models/professor_price_history'
 import Setting from '#models/setting'
 import User from '#models/user'
 import vine from '@vinejs/vine'
@@ -99,6 +101,109 @@ function calculatePrice(court: Court, priceRanges: CourtPriceRange[], start: Dat
 function applyDiscount(price: number, discountPct: number): number {
   if (!discountPct || discountPct <= 0) return price
   return Math.round(price * (1 - discountPct / 100) * 100) / 100
+}
+
+// Returns the price ranges effective for a court at a given date, from history.
+// Falls back to current court_price_ranges if no history row exists.
+async function getHistoricalRanges(courtId: number, date: DateTime): Promise<CourtPriceRange[]> {
+  const dateSQL = date.toUTC().toSQL()!
+
+  const rows = await CourtPriceHistory.query()
+    .where('court_id', courtId)
+    .where('effective_from', '<=', dateSQL)
+    .orderBy('effective_from', 'desc')
+
+  if (rows.length === 0) {
+    // Fallback to current ranges (e.g., if history was never written for this court)
+    return CourtPriceRange.query().where('court_id', courtId)
+  }
+
+  // The most recent effective_from batch wins — group all rows with that same effective_from
+  const latestTs = rows[0].effectiveFrom.toSQL()!
+  const batch = rows.filter(r => r.effectiveFrom.toSQL() === latestTs)
+
+  // Cast to CourtPriceRange shape (same columns) so existing calc functions work
+  return batch as unknown as CourtPriceRange[]
+}
+
+// Returns professor prices effective at a given date, from history.
+async function getHistoricalProfessorPrices(date: DateTime): Promise<{ individual: number; group: number; individualWeekend: number }> {
+  const dateSQL = date.toUTC().toSQL()!
+
+  const row = await ProfessorPriceHistory.query()
+    .where('effective_from', '<=', dateSQL)
+    .orderBy('effective_from', 'desc')
+    .first()
+
+  if (row) {
+    return {
+      individual: Number(row.priceIndividual),
+      group: Number(row.priceGroup),
+      individualWeekend: Number(row.priceIndividualWeekend),
+    }
+  }
+
+  // Fallback to current settings
+  const rows = await Setting.all()
+  const map: Record<string, string> = {}
+  for (const r of rows) map[r.key] = r.value ?? ''
+  return {
+    individual: map['professorPriceIndividual'] ? Number(map['professorPriceIndividual']) : 12000,
+    group: map['professorPriceGroup'] ? Number(map['professorPriceGroup']) : 15000,
+    individualWeekend: map['professorPriceIndividualWeekend'] ? Number(map['professorPriceIndividualWeekend']) : 15000,
+  }
+}
+
+// Calculate the price for a recurring reservation at a specific occurrence date.
+// Returns null if the reservation uses customPrice (caller should use stored value).
+async function calcRecurringOccurrencePrice(reservation: Reservation, occurrenceDate: DateTime): Promise<number | null> {
+  if (reservation.customPrice != null) return null
+
+  const court = await Court.query().where('id', reservation.courtId).firstOrFail()
+  const durationMinutes = Math.round(reservation.endTime.diff(reservation.startTime, 'minutes').minutes)
+
+  // Rebuild start DateTime for this specific occurrence (same time, different date)
+  const resStartART = reservation.startTime.setZone(ART_TZ)
+  const occurrenceStart = occurrenceDate.setZone(ART_TZ).set({
+    hour: resStartART.hour,
+    minute: resStartART.minute,
+    second: 0,
+    millisecond: 0,
+  })
+  const occurrenceEnd = occurrenceStart.plus({ minutes: durationMinutes })
+
+  const targetUser = await User.find(reservation.userId)
+  const isProfessor = targetUser?.role === 'professor'
+
+  let price: number
+
+  if (isProfessor) {
+    const profPrices = await getHistoricalProfessorPrices(occurrenceStart)
+    const isWeekend = occurrenceStart.weekday >= 6
+    const classType = reservation.classType ?? 'individual'
+    if (classType === 'grupal') {
+      price = profPrices.group
+    } else if (isWeekend) {
+      price = profPrices.individualWeekend
+    } else {
+      price = profPrices.individual
+    }
+    price = price * (durationMinutes / 60)
+  } else {
+    const historicalRanges = await getHistoricalRanges(reservation.courtId, occurrenceStart)
+    price = calculatePrice(court, historicalRanges, occurrenceStart, occurrenceEnd)
+  }
+
+  return applyDiscount(price, reservation.discountPercentage ?? 0)
+}
+
+// Returns the next occurrence date (ART) for a recurring reservation on or after `from`.
+function nextOccurrenceDate(reservation: Reservation, from: DateTime): DateTime {
+  const resStartART = reservation.startTime.setZone(ART_TZ)
+  const weekday = resStartART.weekday
+  let candidate = from.setZone(ART_TZ).startOf('day')
+  while (candidate.weekday !== weekday) candidate = candidate.plus({ days: 1 })
+  return candidate
 }
 
 function timeInMinutes(dt: DateTime): number {
@@ -226,9 +331,10 @@ export default class ReservationsController {
 
     const reservations = await query.orderBy('start_time', 'asc')
 
-    // Attach promo info for recurring reservations
+    // Attach promo info and occurrence price for recurring reservations
     const promo = await getRecurringPromoSettings()
-    const result = reservations.map(r => {
+    const nowART = DateTime.now().setZone(ART_TZ)
+    const result = await Promise.all(reservations.map(async r => {
       const obj = r.toJSON()
       // Serialize hidden dates as a flat array of date strings
       obj.hiddenDates = (r.hiddenDates ?? []).map(hd => toDateStr(hd.hiddenDate)).filter(Boolean)
@@ -243,13 +349,28 @@ export default class ReservationsController {
       } else {
         obj.isFreeGame = false
       }
+
+      // For recurring reservations, compute the price at the next upcoming occurrence
+      // so the UI shows the current price rather than the stale stored one.
+      if (r.isRecurring && r.customPrice == null) {
+        try {
+          const nextOccurrence = nextOccurrenceDate(r, nowART)
+          const occurrencePrice = await calcRecurringOccurrencePrice(r, nextOccurrence)
+          if (occurrencePrice !== null) {
+            obj.occurrencePrice = occurrencePrice
+          }
+        } catch {
+          // If price calc fails, fall back to stored totalPrice — never crash the listing
+        }
+      }
+
       return obj
-    })
+    }))
 
     return response.ok(result)
   }
 
-  async show({ params, auth, response }: HttpContext) {
+  async show({ params, auth, request, response }: HttpContext) {
     const user = auth.user!
     const reservation = await Reservation.query()
       .where('id', params.id)
@@ -261,7 +382,27 @@ export default class ReservationsController {
     if ((user.role === 'customer' || user.role === 'professor') && reservation.userId !== user.id) {
       return response.forbidden({ message: 'Acceso denegado' })
     }
-    return response.ok(reservation)
+
+    const obj = reservation.toJSON()
+
+    // For a recurring reservation, the price effective on each occurrence may differ
+    // (e.g. court prices changed over time). When the caller asks about a specific
+    // occurrence date, compute the price that was effective on that date rather than
+    // the stored/next-occurrence value.
+    const dateParam = request.input('date')
+    if (dateParam && reservation.isRecurring && reservation.customPrice == null) {
+      const occurrenceDate = DateTime.fromISO(dateParam, { zone: ART_TZ })
+      if (occurrenceDate.isValid) {
+        try {
+          const occurrencePrice = await calcRecurringOccurrencePrice(reservation, occurrenceDate)
+          if (occurrencePrice !== null) obj.occurrencePrice = occurrencePrice
+        } catch {
+          // Fall back to stored totalPrice — never fail the request over price calc
+        }
+      }
+    }
+
+    return response.ok(obj)
   }
 
   async store({ request, auth, response }: HttpContext) {
@@ -858,6 +999,13 @@ export default class ReservationsController {
     if (receipt) reservation.depositReceipt = receipt
     await reservation.save()
 
+    // For recurring reservations, record which occurrence date this deposit covers
+    let occurrenceDate: string | null = null
+    if (reservation.isRecurring) {
+      const nowART = DateTime.now().setZone(ART_TZ)
+      occurrenceDate = nextOccurrenceDate(reservation, nowART).toISODate()
+    }
+
     // Record payment breakdown
     await ReservationPayment.create({
       reservationId: reservation.id,
@@ -868,6 +1016,7 @@ export default class ReservationsController {
       total: payTotal,
       paidBy: user.id,
       receipt: receipt || null,
+      occurrenceDate,
     })
 
     if (oldStatus !== 'confirmed') {
@@ -902,6 +1051,13 @@ export default class ReservationsController {
     if (receipt) reservation.totalReceipt = receipt
     await reservation.save()
 
+    // For recurring reservations, record which occurrence date this payment covers
+    let occurrenceDate: string | null = null
+    if (reservation.isRecurring) {
+      const nowART = DateTime.now().setZone(ART_TZ)
+      occurrenceDate = nextOccurrenceDate(reservation, nowART).toISODate()
+    }
+
     // Record payment breakdown
     await ReservationPayment.create({
       reservationId: reservation.id,
@@ -912,6 +1068,7 @@ export default class ReservationsController {
       total: payTotal,
       paidBy: user.id,
       receipt: receipt || null,
+      occurrenceDate,
     })
 
     return response.ok(reservation)

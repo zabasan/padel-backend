@@ -1,6 +1,8 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import Court from '#models/court'
 import CourtPriceRange from '#models/court_price_range'
+import CourtPriceHistory from '#models/court_price_history'
+import { DateTime } from 'luxon'
 import vine from '@vinejs/vine'
 
 const courtValidator = vine.compile(
@@ -79,9 +81,22 @@ export default class CourtsController {
 
     await CourtPriceRange.query().where('court_id', court.id).delete()
 
+    const effectiveFrom = DateTime.now()
     for (const range of ranges) {
       await CourtPriceRange.create({
         courtId: court.id,
+        startHour: range.startHour,
+        endHour: range.endHour,
+        pricePerHour: range.pricePerHour,
+        isPeakHour: range.isPeakHour ?? false,
+        price60Min: range.price60Min ?? null,
+        price90Min: range.price90Min ?? null,
+        price120Min: range.price120Min ?? null,
+      })
+
+      await CourtPriceHistory.create({
+        courtId: court.id,
+        effectiveFrom,
         startHour: range.startHour,
         endHour: range.endHour,
         pricePerHour: range.pricePerHour,

@@ -32,6 +32,33 @@ export class AuthAccessTokenSchema extends BaseModel {
   declare updatedAt: DateTime | null
 }
 
+export class CourtPriceHistorySchema extends BaseModel {
+  static $columns = ['courtId', 'createdAt', 'effectiveFrom', 'endHour', 'id', 'isPeakHour', 'price120Min', 'price60Min', 'price90Min', 'pricePerHour', 'startHour'] as const
+  $columns = CourtPriceHistorySchema.$columns
+  @column()
+  declare courtId: number
+  @column.dateTime({ autoCreate: true })
+  declare createdAt: DateTime
+  @column.dateTime()
+  declare effectiveFrom: DateTime
+  @column()
+  declare endHour: string
+  @column({ isPrimary: true })
+  declare id: number
+  @column()
+  declare isPeakHour: boolean
+  @column()
+  declare price120Min: string | null
+  @column()
+  declare price60Min: string | null
+  @column()
+  declare price90Min: string | null
+  @column()
+  declare pricePerHour: string
+  @column()
+  declare startHour: string
+}
+
 export class CourtPriceRangeSchema extends BaseModel {
   static $columns = ['courtId', 'createdAt', 'endHour', 'id', 'isPeakHour', 'price120Min', 'price60Min', 'price90Min', 'pricePerHour', 'startHour', 'updatedAt'] as const
   $columns = CourtPriceRangeSchema.$columns
@@ -82,6 +109,23 @@ export class CourtSchema extends BaseModel {
   declare updatedAt: DateTime | null
 }
 
+export class ProfessorPriceHistorySchema extends BaseModel {
+  static $columns = ['createdAt', 'effectiveFrom', 'id', 'priceGroup', 'priceIndividual', 'priceIndividualWeekend'] as const
+  $columns = ProfessorPriceHistorySchema.$columns
+  @column.dateTime({ autoCreate: true })
+  declare createdAt: DateTime
+  @column.dateTime()
+  declare effectiveFrom: DateTime
+  @column({ isPrimary: true })
+  declare id: number
+  @column()
+  declare priceGroup: string
+  @column()
+  declare priceIndividual: string
+  @column()
+  declare priceIndividualWeekend: string
+}
+
 export class ReservationAuditLogSchema extends BaseModel {
   static $columns = ['createdAt', 'field', 'id', 'newValue', 'oldValue', 'performedBy', 'reservationId'] as const
   $columns = ReservationAuditLogSchema.$columns
@@ -117,7 +161,7 @@ export class ReservationHiddenDateSchema extends BaseModel {
 }
 
 export class ReservationPaymentSchema extends BaseModel {
-  static $columns = ['createdAt', 'efectivo', 'id', 'paidBy', 'postnet', 'receipt', 'reservationId', 'total', 'transferencia', 'type'] as const
+  static $columns = ['createdAt', 'efectivo', 'id', 'occurrenceDate', 'paidBy', 'postnet', 'receipt', 'reservationId', 'total', 'transferencia', 'type'] as const
   $columns = ReservationPaymentSchema.$columns
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime
@@ -125,6 +169,8 @@ export class ReservationPaymentSchema extends BaseModel {
   declare efectivo: string
   @column({ isPrimary: true })
   declare id: number
+  @column.date()
+  declare occurrenceDate: DateTime | null
   @column()
   declare paidBy: number
   @column()

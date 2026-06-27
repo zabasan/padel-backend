@@ -1,5 +1,7 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import Setting from '#models/setting'
+import ProfessorPriceHistory from '#models/professor_price_history'
+import { DateTime } from 'luxon'
 
 export default class SettingsController {
   async show({ response }: HttpContext) {
@@ -53,6 +55,26 @@ export default class SettingsController {
     await Setting.updateOrCreate({ key: 'professorPriceIndividual' }, { key: 'professorPriceIndividual', value: professorPriceIndividual != null && professorPriceIndividual !== '' ? String(professorPriceIndividual) : '12000' })
     await Setting.updateOrCreate({ key: 'professorPriceGroup' }, { key: 'professorPriceGroup', value: professorPriceGroup != null && professorPriceGroup !== '' ? String(professorPriceGroup) : '15000' })
     await Setting.updateOrCreate({ key: 'professorPriceIndividualWeekend' }, { key: 'professorPriceIndividualWeekend', value: professorPriceIndividualWeekend != null && professorPriceIndividualWeekend !== '' ? String(professorPriceIndividualWeekend) : '15000' })
+
+    // Snapshot professor prices into history whenever any of them change
+    const newIndividual = professorPriceIndividual != null && professorPriceIndividual !== '' ? Number(professorPriceIndividual) : 12000
+    const newGroup = professorPriceGroup != null && professorPriceGroup !== '' ? Number(professorPriceGroup) : 15000
+    const newIndividualWeekend = professorPriceIndividualWeekend != null && professorPriceIndividualWeekend !== '' ? Number(professorPriceIndividualWeekend) : 15000
+
+    const lastSnapshot = await ProfessorPriceHistory.query().orderBy('effective_from', 'desc').first()
+    const pricesChanged = !lastSnapshot
+      || Number(lastSnapshot.priceIndividual) !== newIndividual
+      || Number(lastSnapshot.priceGroup) !== newGroup
+      || Number(lastSnapshot.priceIndividualWeekend) !== newIndividualWeekend
+
+    if (pricesChanged) {
+      await ProfessorPriceHistory.create({
+        effectiveFrom: DateTime.now(),
+        priceIndividual: newIndividual,
+        priceGroup: newGroup,
+        priceIndividualWeekend: newIndividualWeekend,
+      })
+    }
 
     return response.ok({
       appTitle: appTitle ?? 'Padel Complex',

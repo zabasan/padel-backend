@@ -13,6 +13,7 @@ export default class ReservationPayment extends BaseModel {
   @column() declare total: number
   @column() declare paidBy: number
   @column() declare receipt: string | null
+  @column() declare occurrenceDate: string | null
   @column.dateTime({ autoCreate: true }) declare createdAt: DateTime
 
   @belongsTo(() => Reservation) declare reservation: BelongsTo<typeof Reservation>
