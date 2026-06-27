@@ -13,7 +13,15 @@ export default class ReservationPayment extends BaseModel {
   @column() declare total: number
   @column() declare paidBy: number
   @column() declare receipt: string | null
-  @column() declare occurrenceDate: string | null
+  @column({
+    consume: (value) => {
+      if (!value) return null
+      if (typeof value === 'string') return value.slice(0, 10)
+      if (value instanceof Date) return value.toISOString().slice(0, 10)
+      return String(value).slice(0, 10)
+    },
+  })
+  declare occurrenceDate: string | null
   @column.dateTime({ autoCreate: true }) declare createdAt: DateTime
 
   @belongsTo(() => Reservation) declare reservation: BelongsTo<typeof Reservation>

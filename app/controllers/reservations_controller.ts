@@ -317,7 +317,7 @@ export default class ReservationsController {
       return response.ok(reservations)
     }
 
-    let query = Reservation.query().preload('court').preload('user').preload('customer').preload('hiddenDates')
+    let query = Reservation.query().preload('court').preload('user').preload('customer').preload('hiddenDates').preload('payments')
 
     if (user.role === 'customer' || user.role === 'professor') {
       query = query.where('user_id', user.id)
@@ -338,6 +338,25 @@ export default class ReservationsController {
       const obj = r.toJSON()
       // Serialize hidden dates as a flat array of date strings
       obj.hiddenDates = (r.hiddenDates ?? []).map(hd => toDateStr(hd.hiddenDate)).filter(Boolean)
+
+      // Per-occurrence TOTAL payment state for recurring reservations.
+      // The series-level `totalPaid` boolean is unreliable across occurrences (a single flag
+      // shared by every week, reset by a timezone-fragile job), so a payment for one week bled
+      // into the next. Instead derive each occurrence's paid state from the ReservationPayment
+      // rows keyed by occurrence_date (timezone-safe date match).
+      // NOTE: the deposit is intentionally NOT per-occurrence — for a fija the deposit is a
+      // one-time hold for the whole series, so `depositPaid` stays the stored series boolean.
+      if (r.isRecurring) {
+        const totalDates: string[] = []
+        for (const p of r.payments ?? []) {
+          if (p.occurrenceDate && p.type === 'total') totalDates.push(p.occurrenceDate)
+        }
+        obj.paidOccurrences = totalDates
+        // For non-expanded consumers (e.g. the reservations list) reflect the NEXT occurrence.
+        const nextDateStr = nextOccurrenceDate(r, nowART).toISODate()
+        obj.totalPaid = nextDateStr != null && totalDates.includes(nextDateStr)
+      }
+
       if (r.isRecurring && promo.enabled && promo.games > 0) {
         const cycle = promo.games + promo.freeGames
         const effectiveGames = effectiveConsecutiveGames(r, obj.hiddenDates)
@@ -979,7 +998,15 @@ export default class ReservationsController {
     if (user.role === 'customer' || user.role === 'professor') return response.forbidden({ message: 'Sin permisos' })
 
     const reservation = await Reservation.findOrFail(params.id)
+    // The deposit is a one-time hold per series (also for fijas), so the guard stays series-level.
     if (reservation.depositPaid) return response.badRequest({ message: 'La seña ya fue registrada' })
+
+    // For recurring reservations, record which occurrence the deposit was taken against.
+    let occurrenceDate: string | null = null
+    if (reservation.isRecurring) {
+      const nowART = DateTime.now().setZone(ART_TZ)
+      occurrenceDate = nextOccurrenceDate(reservation, nowART).toISODate()
+    }
 
     const receipt = request.input('receipt', null)
     const efectivo = Number(request.input('efectivo', 0)) || 0
@@ -999,13 +1026,6 @@ export default class ReservationsController {
     if (receipt) reservation.depositReceipt = receipt
     await reservation.save()
 
-    // For recurring reservations, record which occurrence date this deposit covers
-    let occurrenceDate: string | null = null
-    if (reservation.isRecurring) {
-      const nowART = DateTime.now().setZone(ART_TZ)
-      occurrenceDate = nextOccurrenceDate(reservation, nowART).toISODate()
-    }
-
     // Record payment breakdown
     await ReservationPayment.create({
       reservationId: reservation.id,
@@ -1019,6 +1039,10 @@ export default class ReservationsController {
       occurrenceDate,
     })
 
+    const depositWord = reservation.isRecurring ? 'Depósito' : 'Seña'
+    const auditNote = occurrenceDate ? `$${payTotal} (${occurrenceDate})` : `$${payTotal}`
+    await logReservationChange(user.id, reservation.id, 'depositPayment', null, `${depositWord}: ${auditNote}`)
+
     if (oldStatus !== 'confirmed') {
       await logReservationChange(user.id, reservation.id, 'status', oldStatus, 'confirmed')
     }
@@ -1030,13 +1054,32 @@ export default class ReservationsController {
     if (user.role === 'customer' || user.role === 'professor') return response.forbidden({ message: 'Sin permisos' })
 
     const reservation = await Reservation.findOrFail(params.id)
-    // For reservations with a deposit requirement, deposit must be paid first.
-    // For recurring reservations without deposit set, allow direct payment.
+
+    // For recurring reservations, payment is tracked per occurrence date.
+    let occurrenceDate: string | null = null
+    if (reservation.isRecurring) {
+      const nowART = DateTime.now().setZone(ART_TZ)
+      occurrenceDate = nextOccurrenceDate(reservation, nowART).toISODate()
+    }
+
+    // For reservations with a deposit requirement, the (one-time, series-level) deposit must be
+    // paid first. For recurring reservations without a deposit set, allow direct payment.
     const hasDepositRequirement = reservation.depositPercentage != null || reservation.depositFixedAmount != null
     if (hasDepositRequirement && !reservation.depositPaid) {
       return response.badRequest({ message: reservation.isRecurring ? 'Primero debe registrarse el depósito' : 'Primero debe registrarse el pago de la seña' })
     }
-    if (reservation.totalPaid) return response.badRequest({ message: 'El pago total ya fue registrado' })
+
+    // Already-paid guard: per occurrence for recurring, per series otherwise.
+    if (reservation.isRecurring) {
+      const existing = await ReservationPayment.query()
+        .where('reservation_id', reservation.id)
+        .where('type', 'total')
+        .where('occurrence_date', occurrenceDate!)
+        .first()
+      if (existing) return response.badRequest({ message: 'El pago de este turno ya fue registrado' })
+    } else if (reservation.totalPaid) {
+      return response.badRequest({ message: 'El pago total ya fue registrado' })
+    }
 
     const receipt = request.input('receipt', null)
     const efectivo = Number(request.input('efectivo', 0)) || 0
@@ -1051,13 +1094,6 @@ export default class ReservationsController {
     if (receipt) reservation.totalReceipt = receipt
     await reservation.save()
 
-    // For recurring reservations, record which occurrence date this payment covers
-    let occurrenceDate: string | null = null
-    if (reservation.isRecurring) {
-      const nowART = DateTime.now().setZone(ART_TZ)
-      occurrenceDate = nextOccurrenceDate(reservation, nowART).toISODate()
-    }
-
     // Record payment breakdown
     await ReservationPayment.create({
       reservationId: reservation.id,
@@ -1070,6 +1106,9 @@ export default class ReservationsController {
       receipt: receipt || null,
       occurrenceDate,
     })
+
+    const auditNote = occurrenceDate ? `$${payTotal} (${occurrenceDate})` : `$${payTotal}`
+    await logReservationChange(user.id, reservation.id, 'totalPayment', null, `Pago: ${auditNote}`)
 
     return response.ok(reservation)
   }
