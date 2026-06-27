@@ -396,6 +396,7 @@ export default class ReservationsController {
       .preload('court')
       .preload('user')
       .preload('customer')
+      .preload('payments')
       .firstOrFail()
 
     if ((user.role === 'customer' || user.role === 'professor') && reservation.userId !== user.id) {
@@ -1200,6 +1201,51 @@ export default class ReservationsController {
     await reservation.save()
     await logReservationChange(user.id, reservation.id, 'status', 'cancelled', 'pending')
 
+    return response.ok(reservation)
+  }
+
+  async revertPayment({ params, auth, response }: HttpContext) {
+    const user = auth.user!
+    if (user.role !== 'admin') return response.forbidden({ message: 'Solo administradores pueden revertir pagos' })
+
+    const reservation = await Reservation.findOrFail(params.id)
+    const payment = await ReservationPayment.findOrFail(params.paymentId)
+
+    if (payment.reservationId !== reservation.id) {
+      return response.badRequest({ message: 'El pago no pertenece a esta reserva' })
+    }
+
+    const auditOld = JSON.stringify({
+      type: payment.type,
+      total: payment.total,
+      efectivo: payment.efectivo,
+      transferencia: payment.transferencia,
+      postnet: payment.postnet,
+      occurrenceDate: payment.occurrenceDate ?? undefined,
+    })
+
+    await payment.delete()
+
+    if (payment.type === 'deposit') {
+      reservation.depositPaid = false
+      reservation.depositPaidAt = null
+      reservation.depositPaidBy = null
+      reservation.depositReceipt = null
+    } else {
+      const newCount = Math.max((reservation.totalPaidCount ?? 1) - 1, 0)
+      reservation.totalPaidCount = newCount
+      if (newCount === 0) {
+        reservation.totalPaid = false
+        reservation.totalPaidAt = null
+        reservation.totalPaidBy = null
+        reservation.totalReceipt = null
+      }
+    }
+
+    await reservation.save()
+    await logReservationChange(user.id, reservation.id, 'paymentReverted', auditOld, null)
+
+    await reservation.load('payments')
     return response.ok(reservation)
   }
 

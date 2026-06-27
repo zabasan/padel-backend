@@ -69,6 +69,7 @@ router
             router.patch('reservations/:id/increment-games', [controllers.Reservations, 'incrementGames'])
             router.get('reservations/:id/audit', [controllers.Reservations, 'auditLogs'])
             router.patch('reservations/:id/revert', [controllers.Reservations, 'revert'])
+            router.delete('reservations/:id/payments/:paymentId', [controllers.Reservations, 'revertPayment'])
           })
           .use(middleware.role({ roles: ['admin', 'worker'] }))
 

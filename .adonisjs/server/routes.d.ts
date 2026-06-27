@@ -31,6 +31,7 @@ export type ScannedRoutes = {
     'reservations.increment_games': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'reservations.audit_logs': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'reservations.revert': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'reservations.revert_payment': { paramsTuple: [ParamValue,ParamValue]; params: {'id': ParamValue,'paymentId': ParamValue} }
     'users.store': { paramsTuple?: []; params?: {} }
     'users.index': { paramsTuple?: []; params?: {} }
     'users.show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
@@ -94,6 +95,7 @@ export type ScannedRoutes = {
   DELETE: {
     'courts.destroy': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'reservations.destroy': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'reservations.revert_payment': { paramsTuple: [ParamValue,ParamValue]; params: {'id': ParamValue,'paymentId': ParamValue} }
     'users.destroy': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
   }
   PATCH: {
