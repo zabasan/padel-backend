@@ -51,6 +51,34 @@ const editReservationValidator = vine.compile(
 // Calculate price for football courts: hours × pricePerHour
 const ART_TZ = 'America/Argentina/Buenos_Aires'
 
+// Set of ART weekdays (1=Mon … 7=Sun) spanned by an inclusive [from, to] ISO range.
+// Returns null when the range is open (missing from/to) so callers keep every row.
+export function weekdaysInARTRange(from?: string, to?: string): Set<number> | null {
+  if (!from || !to) return null
+  const fromDT = DateTime.fromISO(from).setZone(ART_TZ).startOf('day')
+  const toDT = DateTime.fromISO(to).setZone(ART_TZ).endOf('day')
+  const weekdays = new Set<number>()
+  for (let d = fromDT; d <= toDT && weekdays.size < 7; d = d.plus({ days: 1 })) {
+    weekdays.add(d.weekday)
+  }
+  return weekdays
+}
+
+// Recurring series are stored as a single row and returned regardless of the requested day
+// so the frontend (CalendarPage.expandReservations) can expand them into occurrences. Drop
+// the ones whose ART weekday can't appear in [from, to] to keep the payload bounded.
+// Weekday is resolved in ART, not UTC: a Friday-22:30 fija is stored as Saturday UTC and
+// must still match a Friday view.
+export function filterRecurringByRange<T extends { isRecurring: boolean; startTime: DateTime }>(
+  rows: T[],
+  from?: string,
+  to?: string
+): T[] {
+  const weekdays = weekdaysInARTRange(from, to)
+  if (!weekdays) return rows
+  return rows.filter((r) => !r.isRecurring || weekdays.has(r.startTime.setZone(ART_TZ).weekday))
+}
+
 function calculateFootballPrice(priceRanges: CourtPriceRange[], defaultPrice: number, start: DateTime, end: DateTime): number {
   const startART = start.setZone(ART_TZ)
   const endART = end.setZone(ART_TZ)
@@ -307,14 +335,19 @@ export default class ReservationsController {
     const to = request.input('to')
 
     if (request.input('summary') === 'true') {
-      let summaryQuery = Reservation.query().select('id', 'status')
+      // start_time + is_recurring are needed to weekday-filter recurring rows; stripped before responding.
+      let summaryQuery = Reservation.query().select('id', 'status', 'start_time', 'is_recurring')
       if (user.role === 'customer' || user.role === 'professor') {
         summaryQuery = summaryQuery.where('user_id', user.id)
       }
-      if (from) summaryQuery = summaryQuery.where('start_time', '>=', DateTime.fromISO(from).toUTC().toSQL()!)
+      // Mirror the main listing: recurring series are date-independent (the `to` bound still applies).
+      if (from) {
+        const fromSQL = DateTime.fromISO(from).toUTC().toSQL()!
+        summaryQuery = summaryQuery.where(q => q.where('start_time', '>=', fromSQL).orWhere('is_recurring', true))
+      }
       if (to) summaryQuery = summaryQuery.where('start_time', '<=', DateTime.fromISO(to).toUTC().toSQL()!)
-      const reservations = await summaryQuery
-      return response.ok(reservations)
+      const rows = filterRecurringByRange(await summaryQuery, from, to)
+      return response.ok(rows.map(r => ({ id: r.id, status: r.status })))
     }
 
     let query = Reservation.query().preload('court').preload('user').preload('customer').preload('hiddenDates').preload('payments')
@@ -331,10 +364,15 @@ export default class ReservationsController {
 
     const reservations = await query.orderBy('start_time', 'asc')
 
+    // The query returns every recurring series regardless of date. Trim ones whose ART
+    // weekday can't fall in the requested window so the response isn't unbounded — the
+    // frontend renders nothing for them anyway. Non-recurring rows are already date-bounded.
+    const rows = filterRecurringByRange(reservations, from, to)
+
     // Attach promo info and occurrence price for recurring reservations
     const promo = await getRecurringPromoSettings()
     const nowART = DateTime.now().setZone(ART_TZ)
-    const result = await Promise.all(reservations.map(async r => {
+    const result = await Promise.all(rows.map(async r => {
       const obj = r.toJSON()
       // Serialize hidden dates as a flat array of date strings
       obj.hiddenDates = (r.hiddenDates ?? []).map(hd => toDateStr(hd.hiddenDate)).filter(Boolean)
