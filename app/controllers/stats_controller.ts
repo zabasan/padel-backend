@@ -88,18 +88,18 @@ export default class StatsController {
                 WHEN r.is_recurring = 1 AND rp.occurrence_date IS NOT NULL THEN (
                   SELECT
                     COALESCE(
-                      -- Padel: match the occurrence start hour to price range
+                      -- Padel: match the occurrence start hour to price range, then apply the reservation's discount
                       (SELECT
                         CASE
                           WHEN TIME_TO_SEC(CONVERT_TZ(r.start_time, '+00:00', '-03:00')) / 3600 < cph2.end_hour
                             AND TIME_TO_SEC(CONVERT_TZ(r.start_time, '+00:00', '-03:00')) / 3600 >= cph2.start_hour
                           THEN
-                            CASE
+                            (CASE
                               WHEN TIMESTAMPDIFF(MINUTE, r.start_time, r.end_time) = 60 AND cph2.price_60_min IS NOT NULL THEN cph2.price_60_min
                               WHEN TIMESTAMPDIFF(MINUTE, r.start_time, r.end_time) = 90 AND cph2.price_90_min IS NOT NULL THEN cph2.price_90_min
                               WHEN TIMESTAMPDIFF(MINUTE, r.start_time, r.end_time) = 120 AND cph2.price_120_min IS NOT NULL THEN cph2.price_120_min
                               ELSE cph2.price_per_hour * TIMESTAMPDIFF(MINUTE, r.start_time, r.end_time) / 60
-                            END
+                            END) * (1 - r.discount_percentage / 100)
                           ELSE NULL
                         END
                         FROM court_price_history cph2

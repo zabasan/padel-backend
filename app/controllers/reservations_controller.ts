@@ -674,7 +674,12 @@ export default class ReservationsController {
     // Status-only update (confirm/cancel)
     const status = request.input('status')
     if (status && ['pending', 'confirmed', 'cancelled'].includes(status) && isAdminOrWorker) {
-      // Admin/worker can cancel any confirmed reservation regardless of time
+      // Past reservations can only be cancelled by an admin (workers are limited to upcoming ones)
+      const isPast = !reservation.isRecurring && reservation.endTime < DateTime.now()
+      if (status === 'cancelled' && isPast && user.role === 'worker') {
+        return response.forbidden({ message: 'Solo un administrador puede cancelar una reserva pasada' })
+      }
+
       const oldStatus = reservation.status
       reservation.status = status
       if (status === 'confirmed' && !reservation.confirmedAt) {
@@ -902,6 +907,12 @@ export default class ReservationsController {
         return response.forbidden({ message: 'Las reservas confirmadas solo pueden cancelarlas admin o empleados' })
       }
       // Admin/worker can cancel any confirmed reservation regardless of time
+    }
+
+    // Past reservations can only be cancelled by an admin (workers are limited to upcoming ones)
+    const isPast = !reservation.isRecurring && reservation.endTime < DateTime.now()
+    if (isPast && user.role === 'worker') {
+      return response.forbidden({ message: 'Solo un administrador puede cancelar una reserva pasada' })
     }
 
     const oldStatus = reservation.status
