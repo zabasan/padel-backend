@@ -328,6 +328,61 @@ async function logReservationChange(performedBy: number, reservationId: number, 
   await ReservationAuditLog.create({ performedBy, reservationId, field, oldValue, newValue })
 }
 
+// Serializes a reservation for the listing, attaching per-occurrence payment state, promo
+// info and the current occurrence price for recurring rows. Shared by the paginated and
+// legacy (array) branches of `index`.
+async function serializeReservationRow(
+  r: Reservation,
+  promo: { enabled: boolean; games: number; freeGames: number },
+  nowART: DateTime
+): Promise<Record<string, any>> {
+  const obj = r.toJSON()
+  // Serialize hidden dates as a flat array of date strings
+  obj.hiddenDates = (r.hiddenDates ?? []).map(hd => toDateStr(hd.hiddenDate)).filter(Boolean)
+
+  // Per-occurrence TOTAL payment state for recurring reservations. The series-level
+  // `totalPaid` boolean is unreliable across occurrences, so derive each occurrence's
+  // paid state from ReservationPayment rows keyed by occurrence_date. The deposit is
+  // intentionally NOT per-occurrence — for a fija it's a one-time hold for the series.
+  if (r.isRecurring) {
+    const totalDates: string[] = []
+    for (const p of r.payments ?? []) {
+      if (p.occurrenceDate && p.type === 'total') totalDates.push(p.occurrenceDate)
+    }
+    obj.paidOccurrences = totalDates
+    const nextDateStr = nextOccurrenceDate(r, nowART).toISODate()
+    obj.totalPaid = nextDateStr != null && totalDates.includes(nextDateStr)
+  }
+
+  if (r.isRecurring && promo.enabled && promo.games > 0) {
+    const cycle = promo.games + promo.freeGames
+    const effectiveGames = effectiveConsecutiveGames(r, obj.hiddenDates)
+    const posInCycle = effectiveGames % cycle
+    obj.isFreeGame = posInCycle >= promo.games
+    obj.consecutiveGamesDisplay = effectiveGames
+    obj.freeGamePosition = promo.games
+    obj.promoCycle = cycle
+  } else {
+    obj.isFreeGame = false
+  }
+
+  // For recurring reservations, compute the price at the next upcoming occurrence
+  // so the UI shows the current price rather than the stale stored one.
+  if (r.isRecurring && r.customPrice == null) {
+    try {
+      const nextOccurrence = nextOccurrenceDate(r, nowART)
+      const occurrencePrice = await calcRecurringOccurrencePrice(r, nextOccurrence)
+      if (occurrencePrice !== null) {
+        obj.occurrencePrice = occurrencePrice
+      }
+    } catch {
+      // If price calc fails, fall back to stored totalPrice — never crash the listing
+    }
+  }
+
+  return obj
+}
+
 export default class ReservationsController {
   async index({ auth, request, response }: HttpContext) {
     const user = auth.user!
@@ -348,6 +403,61 @@ export default class ReservationsController {
       if (to) summaryQuery = summaryQuery.where('start_time', '<=', DateTime.fromISO(to).toUTC().toSQL()!)
       const rows = filterRecurringByRange(await summaryQuery, from, to)
       return response.ok(rows.map(r => ({ id: r.id, status: r.status })))
+    }
+
+    // Paginated mode — activated only when `page` is present. The reservations list uses this;
+    // Calendar (from/to) and Dashboard (summary) omit `page` and still get the full array below.
+    // Filtering (status/search/id), sorting and pagination all happen server-side here.
+    if (request.input('page') !== undefined) {
+      const currentPage = Math.max(1, Number(request.input('page')) || 1)
+      const perPage = Math.min(500, Math.max(1, Number(request.input('perPage', 100)) || 100))
+      const status = request.input('status')
+      const search = String(request.input('search') ?? '').trim()
+      const idFilter = request.input('id')
+
+      let pq = Reservation.query()
+        .preload('court').preload('user').preload('customer').preload('hiddenDates').preload('payments')
+
+      if (user.role === 'customer' || user.role === 'professor') {
+        pq = pq.where('user_id', user.id)
+      }
+      if (idFilter) {
+        pq = pq.where('id', idFilter)
+      }
+      if (status && status !== 'all' && ['pending', 'confirmed', 'cancelled'].includes(status)) {
+        pq = pq.where('status', status)
+      }
+      // Mirror the frontend client filter: match the client's name/phone or the reservation's
+      // contact phone. Only applied when not searching by exact id.
+      if (search && !idFilter) {
+        const like = `%${search}%`
+        pq = pq.where(sub => {
+          sub.whereHas('user', u => {
+            u.where('full_name', 'like', like).orWhere('phone', 'like', like)
+          }).orWhere('contact_phone', 'like', like)
+        })
+      }
+
+      // Match the previous client-side ordering: pending → confirmed → cancelled, then newest first.
+      pq = pq
+        .orderByRaw("CASE status WHEN 'pending' THEN 0 WHEN 'confirmed' THEN 1 WHEN 'cancelled' THEN 2 ELSE 1 END")
+        .orderBy('start_time', 'desc')
+
+      const paginator = await pq.paginate(currentPage, perPage)
+
+      const promo = await getRecurringPromoSettings()
+      const nowART = DateTime.now().setZone(ART_TZ)
+      const data = await Promise.all(paginator.all().map(r => serializeReservationRow(r, promo, nowART)))
+
+      return response.ok({
+        data,
+        meta: {
+          total: paginator.total,
+          perPage: paginator.perPage,
+          currentPage: paginator.currentPage,
+          lastPage: paginator.lastPage,
+        },
+      })
     }
 
     let query = Reservation.query().preload('court').preload('user').preload('customer').preload('hiddenDates').preload('payments')
@@ -372,57 +482,7 @@ export default class ReservationsController {
     // Attach promo info and occurrence price for recurring reservations
     const promo = await getRecurringPromoSettings()
     const nowART = DateTime.now().setZone(ART_TZ)
-    const result = await Promise.all(rows.map(async r => {
-      const obj = r.toJSON()
-      // Serialize hidden dates as a flat array of date strings
-      obj.hiddenDates = (r.hiddenDates ?? []).map(hd => toDateStr(hd.hiddenDate)).filter(Boolean)
-
-      // Per-occurrence TOTAL payment state for recurring reservations.
-      // The series-level `totalPaid` boolean is unreliable across occurrences (a single flag
-      // shared by every week, reset by a timezone-fragile job), so a payment for one week bled
-      // into the next. Instead derive each occurrence's paid state from the ReservationPayment
-      // rows keyed by occurrence_date (timezone-safe date match).
-      // NOTE: the deposit is intentionally NOT per-occurrence — for a fija the deposit is a
-      // one-time hold for the whole series, so `depositPaid` stays the stored series boolean.
-      if (r.isRecurring) {
-        const totalDates: string[] = []
-        for (const p of r.payments ?? []) {
-          if (p.occurrenceDate && p.type === 'total') totalDates.push(p.occurrenceDate)
-        }
-        obj.paidOccurrences = totalDates
-        // For non-expanded consumers (e.g. the reservations list) reflect the NEXT occurrence.
-        const nextDateStr = nextOccurrenceDate(r, nowART).toISODate()
-        obj.totalPaid = nextDateStr != null && totalDates.includes(nextDateStr)
-      }
-
-      if (r.isRecurring && promo.enabled && promo.games > 0) {
-        const cycle = promo.games + promo.freeGames
-        const effectiveGames = effectiveConsecutiveGames(r, obj.hiddenDates)
-        const posInCycle = effectiveGames % cycle
-        obj.isFreeGame = posInCycle >= promo.games
-        obj.consecutiveGamesDisplay = effectiveGames
-        obj.freeGamePosition = promo.games
-        obj.promoCycle = cycle
-      } else {
-        obj.isFreeGame = false
-      }
-
-      // For recurring reservations, compute the price at the next upcoming occurrence
-      // so the UI shows the current price rather than the stale stored one.
-      if (r.isRecurring && r.customPrice == null) {
-        try {
-          const nextOccurrence = nextOccurrenceDate(r, nowART)
-          const occurrencePrice = await calcRecurringOccurrencePrice(r, nextOccurrence)
-          if (occurrencePrice !== null) {
-            obj.occurrencePrice = occurrencePrice
-          }
-        } catch {
-          // If price calc fails, fall back to stored totalPrice — never crash the listing
-        }
-      }
-
-      return obj
-    }))
+    const result = await Promise.all(rows.map(r => serializeReservationRow(r, promo, nowART)))
 
     return response.ok(result)
   }
