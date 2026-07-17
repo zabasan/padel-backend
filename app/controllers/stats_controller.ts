@@ -170,17 +170,17 @@ export default class StatsController {
 
     const grandTotal = result.reduce((s, c) => s + c.totalRevenue, 0)
 
-    // ── Total reservations per court (every reservation MADE in the period, whether or
-    //    not it was charged). Recurring series count once per VISIBLE occurrence in the
-    //    window — same definition the calendar uses: weekly on the series weekday, on/after
-    //    the series start, minus any hidden occurrence. Non-recurring count by start_time.
+    // ── Total reservations per court: every CONFIRMED reservation in the period, charged
+    //    or not (pending / cancelled are excluded). Recurring series count once per VISIBLE
+    //    occurrence in the window — same definition the calendar uses: weekly on the series
+    //    weekday, on/after the series start, minus any hidden occurrence.
     const totalByCourt: Record<number, number> = {}
 
     // Non-recurring: one row = one reservation in range.
     const nonRec = await db.rawQuery(
       `SELECT court_id, COUNT(*) AS cnt
        FROM reservations
-       WHERE status != 'cancelled' AND is_recurring = 0
+       WHERE status = 'confirmed' AND is_recurring = 0
          AND start_time >= ? AND start_time <= ?
        GROUP BY court_id`,
       [fromSQL, toSQL]
@@ -195,7 +195,7 @@ export default class StatsController {
       `SELECT r.id, r.court_id,
          DATE_FORMAT(CONVERT_TZ(r.start_time, '+00:00', '-03:00'), '%Y-%m-%d') AS start_date_art
        FROM reservations r
-       WHERE r.status != 'cancelled' AND r.is_recurring = 1
+       WHERE r.status = 'confirmed' AND r.is_recurring = 1
          AND DATE(CONVERT_TZ(r.start_time, '+00:00', '-03:00')) <= ?`,
       [toDate]
     )
