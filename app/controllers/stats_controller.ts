@@ -52,7 +52,8 @@ export default class StatsController {
           c.id,
           c.name,
           c.type,
-          COALESCE(COUNT(DISTINCT r.id), 0) AS completed_reservations,
+          (COUNT(DISTINCT CASE WHEN r.is_recurring = 0 AND r.total_paid = 1 THEN r.id END)
+            + COUNT(DISTINCT CASE WHEN r.is_recurring = 1 AND rp.id IS NOT NULL THEN rp.id END)) AS completed_reservations,
           COALESCE(SUM(${col}), 0) AS total_revenue
         FROM courts c
         LEFT JOIN reservations r
@@ -78,7 +79,8 @@ export default class StatsController {
           c.id,
           c.name,
           c.type,
-          COALESCE(COUNT(DISTINCT r.id), 0) AS completed_reservations,
+          (COUNT(DISTINCT CASE WHEN r.is_recurring = 0 AND r.total_paid = 1 THEN r.id END)
+            + COUNT(DISTINCT CASE WHEN r.is_recurring = 1 AND rp.id IS NOT NULL THEN rp.id END)) AS completed_reservations,
           COALESCE(
             SUM(
               CASE
@@ -162,10 +164,81 @@ export default class StatsController {
       name: r.name,
       type: r.type,
       completedReservations: Number(r.completed_reservations),
+      totalReservations: 0,
       totalRevenue: Number(r.total_revenue),
     }))
 
     const grandTotal = result.reduce((s, c) => s + c.totalRevenue, 0)
+
+    // ── Total reservations per court (every reservation MADE in the period, whether or
+    //    not it was charged). Recurring series count once per VISIBLE occurrence in the
+    //    window — same definition the calendar uses: weekly on the series weekday, on/after
+    //    the series start, minus any hidden occurrence. Non-recurring count by start_time.
+    const totalByCourt: Record<number, number> = {}
+
+    // Non-recurring: one row = one reservation in range.
+    const nonRec = await db.rawQuery(
+      `SELECT court_id, COUNT(*) AS cnt
+       FROM reservations
+       WHERE status != 'cancelled' AND is_recurring = 0
+         AND start_time >= ? AND start_time <= ?
+       GROUP BY court_id`,
+      [fromSQL, toSQL]
+    )
+    for (const row of nonRec[0] as any[]) {
+      totalByCourt[row.court_id] = Number(row.cnt)
+    }
+
+    // Recurring: fetch every open-ended series whose first occurrence is on/before the
+    // window end, then expand its weekly occurrences inside the window (skipping hidden).
+    const recRes = await db.rawQuery(
+      `SELECT r.id, r.court_id,
+         DATE_FORMAT(CONVERT_TZ(r.start_time, '+00:00', '-03:00'), '%Y-%m-%d') AS start_date_art
+       FROM reservations r
+       WHERE r.status != 'cancelled' AND r.is_recurring = 1
+         AND DATE(CONVERT_TZ(r.start_time, '+00:00', '-03:00')) <= ?`,
+      [toDate]
+    )
+    const recRows = recRes[0] as any[]
+
+    if (recRows.length) {
+      const ids = recRows.map((r) => r.id)
+      const hidRes = await db.rawQuery(
+        `SELECT reservation_id, DATE_FORMAT(hidden_date, '%Y-%m-%d') AS d
+         FROM reservation_hidden_dates
+         WHERE reservation_id IN (${ids.map(() => '?').join(',')})`,
+        ids
+      )
+      const hiddenByRes: Record<number, Set<string>> = {}
+      for (const h of hidRes[0] as any[]) {
+        ;(hiddenByRes[h.reservation_id] ??= new Set()).add(h.d)
+      }
+
+      const fromDay = from.startOf('day')
+      for (const r of recRows) {
+        const seriesStart = DateTime.fromISO(r.start_date_art, { zone: TZ }).startOf('day')
+        const hidden = hiddenByRes[r.id] ?? new Set<string>()
+
+        // Advance to the first occurrence inside the window (weekly cadence from the start).
+        let cur = seriesStart
+        if (cur < fromDay) {
+          const weeks = Math.floor(fromDay.diff(cur, 'weeks').weeks)
+          cur = cur.plus({ weeks: Math.max(0, weeks) })
+          while (cur < fromDay) cur = cur.plus({ weeks: 1 })
+        }
+
+        let count = 0
+        while (cur.toISODate()! <= toDate!) {
+          if (!hidden.has(cur.toISODate()!)) count++
+          cur = cur.plus({ weeks: 1 })
+        }
+        if (count > 0) totalByCourt[r.court_id] = (totalByCourt[r.court_id] ?? 0) + count
+      }
+    }
+
+    for (const c of result) {
+      c.totalReservations = totalByCourt[c.id] ?? 0
+    }
 
     // ── Payment method breakdown from reservation_payments table ──
     const breakdown = await db.rawQuery(`
