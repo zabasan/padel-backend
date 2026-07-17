@@ -182,12 +182,26 @@ async function getHistoricalProfessorPrices(date: DateTime): Promise<{ individua
   }
 }
 
+// Per-request cache to avoid re-fetching the same historical prices when serializing
+// many reservations at once (e.g. the paginated listing). Court ranges are keyed by court id
+// and professor prices are shared, since every "next occurrence" resolves to the latest batch.
+type PriceCache = {
+  ranges: Map<number, CourtPriceRange[]>
+  prof?: { individual: number; group: number; individualWeekend: number }
+}
+
 // Calculate the price for a recurring reservation at a specific occurrence date.
 // Returns null if the reservation uses customPrice (caller should use stored value).
-async function calcRecurringOccurrencePrice(reservation: Reservation, occurrenceDate: DateTime): Promise<number | null> {
+// `opts.court` / `opts.targetUser` let callers pass already-preloaded relations to skip queries;
+// `opts.cache` memoizes historical lookups across a batch of reservations.
+async function calcRecurringOccurrencePrice(
+  reservation: Reservation,
+  occurrenceDate: DateTime,
+  opts: { court?: Court; targetUser?: User | null; cache?: PriceCache } = {}
+): Promise<number | null> {
   if (reservation.customPrice != null) return null
 
-  const court = await Court.query().where('id', reservation.courtId).firstOrFail()
+  const court = opts.court ?? await Court.query().where('id', reservation.courtId).firstOrFail()
   const durationMinutes = Math.round(reservation.endTime.diff(reservation.startTime, 'minutes').minutes)
 
   // Rebuild start DateTime for this specific occurrence (same time, different date)
@@ -200,13 +214,17 @@ async function calcRecurringOccurrencePrice(reservation: Reservation, occurrence
   })
   const occurrenceEnd = occurrenceStart.plus({ minutes: durationMinutes })
 
-  const targetUser = await User.find(reservation.userId)
+  const targetUser = 'targetUser' in opts ? opts.targetUser : await User.find(reservation.userId)
   const isProfessor = targetUser?.role === 'professor'
 
   let price: number
 
   if (isProfessor) {
-    const profPrices = await getHistoricalProfessorPrices(occurrenceStart)
+    let profPrices = opts.cache?.prof
+    if (!profPrices) {
+      profPrices = await getHistoricalProfessorPrices(occurrenceStart)
+      if (opts.cache) opts.cache.prof = profPrices
+    }
     const isWeekend = occurrenceStart.weekday >= 6
     const classType = reservation.classType ?? 'individual'
     if (classType === 'grupal') {
@@ -218,11 +236,30 @@ async function calcRecurringOccurrencePrice(reservation: Reservation, occurrence
     }
     price = price * (durationMinutes / 60)
   } else {
-    const historicalRanges = await getHistoricalRanges(reservation.courtId, occurrenceStart)
+    let historicalRanges = opts.cache?.ranges.get(reservation.courtId)
+    if (!historicalRanges) {
+      historicalRanges = await getHistoricalRanges(reservation.courtId, occurrenceStart)
+      opts.cache?.ranges.set(reservation.courtId, historicalRanges)
+    }
     price = calculatePrice(court, historicalRanges, occurrenceStart, occurrenceEnd)
   }
 
   return applyDiscount(price, reservation.discountPercentage ?? 0)
+}
+
+// Runs an async mapper over items with a bounded number of concurrent operations, so a large
+// page never opens more DB connections than the pool can serve (which stalls/times out in prod).
+async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T, index: number) => Promise<R>): Promise<R[]> {
+  const results: R[] = new Array(items.length)
+  let cursor = 0
+  const worker = async () => {
+    while (cursor < items.length) {
+      const idx = cursor++
+      results[idx] = await fn(items[idx], idx)
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, () => worker()))
+  return results
 }
 
 // Returns the next occurrence date (ART) for a recurring reservation on or after `from`.
@@ -334,7 +371,8 @@ async function logReservationChange(performedBy: number, reservationId: number, 
 async function serializeReservationRow(
   r: Reservation,
   promo: { enabled: boolean; games: number; freeGames: number },
-  nowART: DateTime
+  nowART: DateTime,
+  cache?: PriceCache
 ): Promise<Record<string, any>> {
   const obj = r.toJSON()
   // Serialize hidden dates as a flat array of date strings
@@ -371,7 +409,7 @@ async function serializeReservationRow(
   if (r.isRecurring && r.customPrice == null) {
     try {
       const nextOccurrence = nextOccurrenceDate(r, nowART)
-      const occurrencePrice = await calcRecurringOccurrencePrice(r, nextOccurrence)
+      const occurrencePrice = await calcRecurringOccurrencePrice(r, nextOccurrence, { court: r.court, targetUser: r.user, cache })
       if (occurrencePrice !== null) {
         obj.occurrencePrice = occurrencePrice
       }
@@ -447,7 +485,8 @@ export default class ReservationsController {
 
       const promo = await getRecurringPromoSettings()
       const nowART = DateTime.now().setZone(ART_TZ)
-      const data = await Promise.all(paginator.all().map(r => serializeReservationRow(r, promo, nowART)))
+      const cache: PriceCache = { ranges: new Map() }
+      const data = await mapWithConcurrency(paginator.all(), 8, r => serializeReservationRow(r, promo, nowART, cache))
 
       return response.ok({
         data,
@@ -482,7 +521,8 @@ export default class ReservationsController {
     // Attach promo info and occurrence price for recurring reservations
     const promo = await getRecurringPromoSettings()
     const nowART = DateTime.now().setZone(ART_TZ)
-    const result = await Promise.all(rows.map(r => serializeReservationRow(r, promo, nowART)))
+    const cache: PriceCache = { ranges: new Map() }
+    const result = await mapWithConcurrency(rows, 8, r => serializeReservationRow(r, promo, nowART, cache))
 
     return response.ok(result)
   }
@@ -1397,16 +1437,39 @@ export default class ReservationsController {
     return response.ok(reservation)
   }
 
-  async auditLogsAll({ auth, response }: HttpContext) {
+  async auditLogsAll({ auth, request, response }: HttpContext) {
     const user = auth.user!
     if (user.role !== 'admin') return response.forbidden({ message: 'Sin permisos' })
 
-    const logs = await ReservationAuditLog.query()
-      .preload('performer', q => q.select('id', 'full_name', 'email', 'role'))
-      .preload('reservation', q => q.preload('court', c => c.select('id', 'name')))
-      .orderBy('created_at', 'desc')
-      .limit(500)
+    const currentPage = Math.max(1, Number(request.input('page', 1)) || 1)
+    const perPage = Math.min(200, Math.max(1, Number(request.input('perPage', 50)) || 50))
+    const search = String(request.input('search') ?? '').trim()
 
-    return response.ok(logs)
+    let q = ReservationAuditLog.query()
+      .preload('performer', p => p.select('id', 'full_name', 'email', 'role'))
+      .preload('reservation', r => r.preload('court', c => c.select('id', 'name')))
+      .orderBy('created_at', 'desc')
+
+    if (search) {
+      const like = `%${search}%`
+      q = q.where(sub => {
+        sub.whereHas('performer', p => p.where('full_name', 'like', like))
+          .orWhereHas('reservation', r => r.whereHas('court', c => c.where('name', 'like', like)))
+          .orWhere('field', 'like', like)
+          .orWhere('old_value', 'like', like)
+          .orWhere('new_value', 'like', like)
+      })
+    }
+
+    const paginator = await q.paginate(currentPage, perPage)
+    return response.ok({
+      data: paginator.all(),
+      meta: {
+        total: paginator.total,
+        perPage: paginator.perPage,
+        currentPage: paginator.currentPage,
+        lastPage: paginator.lastPage,
+      },
+    })
   }
 }
