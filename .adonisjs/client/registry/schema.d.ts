@@ -379,6 +379,18 @@ export interface Registry {
       errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/users_controller').default['index']>>>
     }
   }
+  'users.search': {
+    methods: ["GET","HEAD"]
+    pattern: '/api/v1/users/search'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/users_controller').default['search']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/users_controller').default['search']>>>
+    }
+  }
   'users.show': {
     methods: ["GET","HEAD"]
     pattern: '/api/v1/users/:id'

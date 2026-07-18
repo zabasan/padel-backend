@@ -67,13 +67,57 @@ export default class UsersController {
     return response.ok({ message: 'Login reseteado correctamente', phone: user.phone })
   }
 
-  async index({ request, response }: HttpContext) {
+  async index({ request, response, auth }: HttpContext) {
+    const performer = auth.user!
+    const page = Math.max(1, Number(request.input('page', 1)) || 1)
+    const perPage = Math.min(100, Math.max(1, Number(request.input('perPage', 20)) || 20))
     const roleFilter = request.input('role')
-    let query = User.query().select(['id', 'full_name', 'email', 'role', 'status', 'phone', 'padel_category', 'created_at'])
-    if (roleFilter) {
-      query = query.where('role', roleFilter)
+    const category = request.input('category')
+    const search = String(request.input('search', '') || '').trim()
+
+    const query = User.query().select(['id', 'full_name', 'email', 'role', 'status', 'phone', 'padel_category', 'created_at'])
+
+    // Workers only see customers and professors; admins see everyone.
+    if (performer.role !== 'admin') {
+      query.whereIn('role', ['customer', 'professor'])
     }
-    const users = await query
+
+    if (roleFilter) query.where('role', roleFilter)
+
+    if (category === 'null') query.whereNull('padel_category')
+    else if (category) query.where('padel_category', category)
+
+    // Search by name, email or phone. Digits are matched against phone (whatsapp).
+    if (search) {
+      const digits = search.replace(/\D/g, '')
+      query.where((q) => {
+        q.where('full_name', 'like', `%${search}%`).orWhere('email', 'like', `%${search}%`)
+        if (digits) q.orWhere('phone', 'like', `%${digits}%`)
+      })
+    }
+
+    query.orderBy('full_name', 'asc')
+
+    const users = await query.paginate(page, perPage)
+    return response.ok(users.toJSON())
+  }
+
+  // Lightweight autocomplete for assigning a customer to a reservation. Letters search the
+  // name; digits search the phone/whatsapp. Requires at least 3 characters.
+  async search({ request, response }: HttpContext) {
+    const q = String(request.input('q', '') || '').trim()
+    if (q.length < 3) return response.ok([])
+
+    const query = User.query().select(['id', 'full_name', 'email', 'role', 'phone', 'padel_category'])
+    if (/[a-zA-Z]/.test(q)) {
+      query.where('full_name', 'like', `%${q}%`)
+    } else {
+      const digits = q.replace(/\D/g, '')
+      if (!digits) return response.ok([])
+      query.where('phone', 'like', `%${digits}%`)
+    }
+
+    const users = await query.orderBy('full_name', 'asc').limit(15)
     return response.ok(users)
   }
 

@@ -52,6 +52,7 @@ export interface ApiDefinition {
   users: {
     store: typeof routes['users.store']
     index: typeof routes['users.index']
+    search: typeof routes['users.search']
     show: typeof routes['users.show']
     update: typeof routes['users.update']
     resetLogin: typeof routes['users.reset_login']

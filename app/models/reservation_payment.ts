@@ -22,6 +22,7 @@ export default class ReservationPayment extends BaseModel {
     },
   })
   declare occurrenceDate: string | null
+  @column() declare expectedAmount: number | null
   @column.dateTime({ autoCreate: true }) declare createdAt: DateTime
 
   @belongsTo(() => Reservation) declare reservation: BelongsTo<typeof Reservation>

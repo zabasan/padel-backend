@@ -161,12 +161,14 @@ export class ReservationHiddenDateSchema extends BaseModel {
 }
 
 export class ReservationPaymentSchema extends BaseModel {
-  static $columns = ['createdAt', 'efectivo', 'id', 'occurrenceDate', 'paidBy', 'postnet', 'receipt', 'reservationId', 'total', 'transferencia', 'type'] as const
+  static $columns = ['createdAt', 'efectivo', 'expectedAmount', 'id', 'occurrenceDate', 'paidBy', 'postnet', 'receipt', 'reservationId', 'total', 'transferencia', 'type'] as const
   $columns = ReservationPaymentSchema.$columns
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime
   @column()
   declare efectivo: string
+  @column()
+  declare expectedAmount: string | null
   @column({ isPrimary: true })
   declare id: number
   @column.date()

@@ -79,6 +79,7 @@ router
           .group(() => {
             router.post('users', [controllers.Users, 'store'])
             router.get('users', [controllers.Users, 'index'])
+            router.get('users/search', [controllers.Users, 'search'])
             router.get('users/:id', [controllers.Users, 'show'])
             router.put('users/:id', [controllers.Users, 'update'])
             router.post('users/:id/reset-login', [controllers.Users, 'resetLogin'])

@@ -18,7 +18,23 @@ function normalizeOccurrenceDate(value: unknown): string | null {
 interface FakePayment {
   type: 'deposit' | 'total'
   occurrenceDate: unknown // string | Date | null — as it may arrive from the DB
+  total?: number
+  expectedAmount?: number | null
 }
+
+// Mirrors reservations_controller.computeCarryBalance: net Σ(total − expectedAmount) over
+// TOTAL payments with a non-null expectedAmount. Negative → debt, positive → credit.
+function computeCarryBalance(payments: FakePayment[]): number {
+  let saldo = 0
+  for (const p of payments) {
+    if (p.type !== 'total' || p.expectedAmount == null) continue
+    saldo += Number(p.total) - Number(p.expectedAmount)
+  }
+  return Math.round(saldo * 100) / 100
+}
+
+const payFull = (total: number, expectedAmount: number | null, occurrenceDate: unknown = '2026-07-03'): FakePayment =>
+  ({ type: 'total', occurrenceDate, total, expectedAmount })
 
 // Mirrors reservations_controller.index: only TOTAL payments with an occurrence_date
 // contribute to the per-occurrence paid set (deposit is series-level, not per occurrence).
@@ -155,6 +171,61 @@ test.group('Recurring payments — list page next-occurrence flag', () => {
 
   test('totalPaid=false when only a deposit exists for the next occurrence', ({ assert }) => {
     assert.isFalse(nextOccurrenceTotalPaid([pay('deposit', '2026-07-03')], resStart, now))
+  })
+})
+
+test.group('Recurring payments — carry balance (deuda/crédito arrastrado)', () => {
+  test('pago exacto → saldo 0', ({ assert }) => {
+    assert.equal(computeCarryBalance([payFull(30000, 30000)]), 0)
+  })
+
+  test('pago de menos → saldo negativo (deuda)', ({ assert }) => {
+    assert.equal(computeCarryBalance([payFull(27000, 30000)]), -3000)
+  })
+
+  test('pago de más → saldo positivo (crédito)', ({ assert }) => {
+    assert.equal(computeCarryBalance([payFull(35000, 30000)]), 5000)
+  })
+
+  test('serie que salda la deuda → 0 (semana 1 debe 3k, semana 2 paga 33k)', ({ assert }) => {
+    const payments = [
+      payFull(27000, 30000, '2026-07-03'),
+      payFull(33000, 30000, '2026-07-10'),
+    ]
+    assert.equal(computeCarryBalance(payments), 0)
+  })
+
+  test('crédito rueda a través de una semana oculta (sin pago) hasta la próxima cobrada', ({ assert }) => {
+    // Semana 1: pagó de más 5k. Semana 2 oculta → sin fila. Semana 3: precio 30k, cobra 25k.
+    const payments = [
+      payFull(35000, 30000, '2026-07-03'),
+      payFull(25000, 30000, '2026-07-17'),
+    ]
+    assert.equal(computeCarryBalance(payments), 0)
+  })
+
+  test('expectedAmount null (pagos pre-feature) se excluyen del saldo', ({ assert }) => {
+    assert.equal(computeCarryBalance([payFull(27000, null)]), 0)
+    assert.equal(computeCarryBalance([{ type: 'total', occurrenceDate: '2026-07-03', total: 27000 }]), 0)
+  })
+
+  test('pagos de tipo deposit no afectan el saldo', ({ assert }) => {
+    const payments: FakePayment[] = [
+      { type: 'deposit', occurrenceDate: '2026-07-03', total: 5000, expectedAmount: 30000 },
+      payFull(27000, 30000, '2026-07-03'),
+    ]
+    assert.equal(computeCarryBalance(payments), -3000)
+  })
+
+  test('revertir un pago (quitar la fila) recalcula el saldo', ({ assert }) => {
+    const all = [payFull(27000, 30000, '2026-07-03'), payFull(20000, 30000, '2026-07-10')]
+    assert.equal(computeCarryBalance(all), -13000)
+    // Se revierte el pago de la semana 2 → queda solo la deuda de la semana 1.
+    assert.equal(computeCarryBalance([all[0]]), -3000)
+  })
+
+  test('sin pagos → saldo 0', ({ assert }) => {
+    assert.equal(computeCarryBalance([]), 0)
   })
 })
 

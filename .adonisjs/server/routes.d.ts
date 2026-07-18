@@ -35,6 +35,7 @@ export type ScannedRoutes = {
     'reservations.revert_all_payments': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'users.store': { paramsTuple?: []; params?: {} }
     'users.index': { paramsTuple?: []; params?: {} }
+    'users.search': { paramsTuple?: []; params?: {} }
     'users.show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'users.update': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'users.reset_login': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
@@ -55,6 +56,7 @@ export type ScannedRoutes = {
     'reservations.show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'reservations.audit_logs': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'users.index': { paramsTuple?: []; params?: {} }
+    'users.search': { paramsTuple?: []; params?: {} }
     'users.show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'stats.index': { paramsTuple?: []; params?: {} }
     'user_audit_logs.index': { paramsTuple?: []; params?: {} }
@@ -70,6 +72,7 @@ export type ScannedRoutes = {
     'reservations.show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'reservations.audit_logs': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'users.index': { paramsTuple?: []; params?: {} }
+    'users.search': { paramsTuple?: []; params?: {} }
     'users.show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'stats.index': { paramsTuple?: []; params?: {} }
     'user_audit_logs.index': { paramsTuple?: []; params?: {} }

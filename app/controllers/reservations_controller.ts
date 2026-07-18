@@ -9,6 +9,7 @@ import CourtPriceHistory from '#models/court_price_history'
 import ProfessorPriceHistory from '#models/professor_price_history'
 import Setting from '#models/setting'
 import User from '#models/user'
+import reservationCalendarCache from '#services/reservation_calendar_cache'
 import vine from '@vinejs/vine'
 import { DateTime } from 'luxon'
 
@@ -276,6 +277,20 @@ function timeInMinutes(dt: DateTime): number {
   return art.hour * 60 + art.minute
 }
 
+// Net carry balance for a recurring series: Σ(total − expectedAmount) over its TOTAL payments.
+// Negative → the customer owes money (paid less than expected on some occurrence); positive →
+// credit (paid more). Payments without expectedAmount (pre-feature) are excluded so they never
+// create phantom balances. The balance rolls forward automatically: a hidden occurrence records
+// no payment, so it never enters the sum, and the balance simply surfaces on the next charged one.
+function computeCarryBalance(r: Reservation): number {
+  let saldo = 0
+  for (const p of r.payments ?? []) {
+    if (p.type !== 'total' || p.expectedAmount == null) continue
+    saldo += Number(p.total) - Number(p.expectedAmount)
+  }
+  return Math.round(saldo * 100) / 100
+}
+
 // Returns the effective consecutive games streak, accounting for hidden dates that have
 // already passed since the last increment. A past hidden occurrence breaks the streak.
 function effectiveConsecutiveGames(
@@ -390,6 +405,7 @@ async function serializeReservationRow(
     obj.paidOccurrences = totalDates
     const nextDateStr = nextOccurrenceDate(r, nowART).toISODate()
     obj.totalPaid = nextDateStr != null && totalDates.includes(nextDateStr)
+    obj.carryBalance = computeCarryBalance(r)
   }
 
   if (r.isRecurring && promo.enabled && promo.games > 0) {
@@ -499,6 +515,79 @@ export default class ReservationsController {
       })
     }
 
+    // ── Smart split cache (calendar path) ────────────────────────────────
+    // Admin/worker calendar requests (from+to, all data identical across those
+    // roles) are split into a frozen past segment and a live present/future one.
+    // Past-dated NON-recurring rows are cached 12h; today-onward rows and every
+    // recurring series are always served live. Merged back into one array so the
+    // response shape is byte-for-byte the same as the generic path below.
+    if (from && to && (user.role === 'admin' || user.role === 'worker')) {
+      // Force a full DB read (as if no cache key existed) when the client opts out.
+      // The fresh past segment is still written back, so this doubles as a refresh.
+      const ignoreCache = request.input('ignore_cache') === 'true' || request.input('ignore_cache') === true
+      const promo = await getRecurringPromoSettings()
+      const nowART = DateTime.now().setZone(ART_TZ)
+      const todayStartMs = nowART.startOf('day').toMillis()
+
+      const fromDT = DateTime.fromISO(from)
+      const toDT = DateTime.fromISO(to)
+      const fromMs = fromDT.toMillis()
+      const toMs = toDT.toMillis()
+      const fromSQL = fromDT.toUTC().toSQL()!
+      const toSQL = toDT.toUTC().toSQL()!
+
+      const serializeRows = (rows: Reservation[]) => {
+        const cache: PriceCache = { ranges: new Map() }
+        return mapWithConcurrency(rows, 8, r => serializeReservationRow(r, promo, nowART, cache))
+      }
+
+      // Recurring series are date-independent — always live. Preserve the generic
+      // path's `start_time <= to` bound (a fija starting after the window is hidden)
+      // and the weekday trim.
+      const recurringModels = await Reservation.query()
+        .preload('court').preload('user').preload('customer').preload('hiddenDates').preload('payments')
+        .where('is_recurring', true)
+        .where('start_time', '<=', toSQL)
+      const recurringRows = await serializeRows(filterRecurringByRange(recurringModels, from, to))
+
+      // Past NON-recurring segment [from, min(to, todayStart)) — cacheable.
+      let pastRows: Record<string, any>[] = []
+      if (fromMs < todayStartMs) {
+        const segToMs = Math.min(toMs, todayStartMs - 1)
+        const cached = ignoreCache ? null : reservationCalendarCache.get(fromMs, segToMs)
+        if (cached) {
+          pastRows = cached
+        } else {
+          const segToSQL = DateTime.fromMillis(segToMs).toUTC().toSQL()!
+          const models = await Reservation.query()
+            .preload('court').preload('user').preload('customer').preload('hiddenDates').preload('payments')
+            .where('is_recurring', false)
+            .where('start_time', '>=', fromSQL)
+            .where('start_time', '<=', segToSQL)
+          pastRows = await serializeRows(models)
+          reservationCalendarCache.set(fromMs, segToMs, pastRows)
+        }
+      }
+
+      // Live NON-recurring segment [max(from, todayStart), to] — never cached.
+      let liveRows: Record<string, any>[] = []
+      const liveStartMs = Math.max(fromMs, todayStartMs)
+      if (toMs >= liveStartMs) {
+        const liveStartSQL = DateTime.fromMillis(liveStartMs).toUTC().toSQL()!
+        const models = await Reservation.query()
+          .preload('court').preload('user').preload('customer').preload('hiddenDates').preload('payments')
+          .where('is_recurring', false)
+          .where('start_time', '>=', liveStartSQL)
+          .where('start_time', '<=', toSQL)
+        liveRows = await serializeRows(models)
+      }
+
+      const merged = [...pastRows, ...liveRows, ...recurringRows]
+      merged.sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())
+      return response.ok(merged)
+    }
+    // ─────────────────────────────────────────────────────────────────────
+
     let query = Reservation.query().preload('court').preload('user').preload('customer').preload('hiddenDates').preload('payments')
 
     if (user.role === 'customer' || user.role === 'professor') {
@@ -542,6 +631,9 @@ export default class ReservationsController {
     }
 
     const obj = reservation.toJSON()
+
+    // Series-level carry balance (deuda/crédito), independent of the requested occurrence date.
+    if (reservation.isRecurring) obj.carryBalance = computeCarryBalance(reservation)
 
     // For a recurring reservation, the price effective on each occurrence may differ
     // (e.g. court prices changed over time). When the caller asks about a specific
@@ -755,12 +847,18 @@ export default class ReservationsController {
       await logReservationChange(user.id, reservation.id, 'created', null, 'pending')
     }
 
+    // Drop any cached past window covering this date (admin can backdate reservations).
+    reservationCalendarCache.invalidateFor(reservation.startTime)
+
     return response.created(reservation)
   }
 
   async update({ params, request, auth, response }: HttpContext) {
     const user = auth.user!
     const reservation = await Reservation.findOrFail(params.id)
+    // Capture the pre-edit instant so we can invalidate the cache window it was in,
+    // even if the edit moves the reservation to a different date.
+    const originalStartTime = reservation.startTime
 
     if (user.role === 'customer') {
       return response.forbidden({ message: 'Sin permisos para modificar reservas' })
@@ -792,6 +890,7 @@ export default class ReservationsController {
       }
       await reservation.save()
       await logReservationChange(user.id, reservation.id, 'status', oldStatus, status)
+      reservationCalendarCache.invalidateFor(reservation.startTime)
       return response.ok(reservation)
     }
 
@@ -991,6 +1090,10 @@ export default class ReservationsController {
       await logReservationChange(user.id, reservation.id, field, vals.old, vals.new)
     }
 
+    // Invalidate both the old and new date windows (the edit may have moved it).
+    reservationCalendarCache.invalidateFor(originalStartTime)
+    reservationCalendarCache.invalidateFor(reservation.startTime)
+
     return response.ok(reservation)
   }
 
@@ -1023,6 +1126,7 @@ export default class ReservationsController {
     }
     await reservation.save()
     await logReservationChange(user.id, reservation.id, 'status', oldStatus, 'cancelled')
+    reservationCalendarCache.invalidateFor(reservation.startTime)
     return response.ok({ message: 'Reserva cancelada correctamente' })
   }
 
@@ -1196,6 +1300,7 @@ export default class ReservationsController {
     if (oldStatus !== 'confirmed') {
       await logReservationChange(user.id, reservation.id, 'status', oldStatus, 'confirmed')
     }
+    reservationCalendarCache.invalidateFor(reservation.startTime)
     return response.ok(reservation)
   }
 
@@ -1205,11 +1310,15 @@ export default class ReservationsController {
 
     const reservation = await Reservation.findOrFail(params.id)
 
-    // For recurring reservations, payment is tracked per occurrence date.
+    // For recurring reservations, payment is tracked per occurrence date, and we freeze the
+    // base price expected for that occurrence so the series carry balance can be derived.
     let occurrenceDate: string | null = null
+    let expectedAmount: number | null = null
     if (reservation.isRecurring) {
       const nowART = DateTime.now().setZone(ART_TZ)
-      occurrenceDate = nextOccurrenceDate(reservation, nowART).toISODate()
+      const nextOcc = nextOccurrenceDate(reservation, nowART)
+      occurrenceDate = nextOcc.toISODate()
+      expectedAmount = (await calcRecurringOccurrencePrice(reservation, nextOcc)) ?? Number(reservation.totalPrice)
     }
 
     // For reservations with a deposit requirement, the (one-time, series-level) deposit must be
@@ -1255,11 +1364,13 @@ export default class ReservationsController {
       paidBy: user.id,
       receipt: receipt || null,
       occurrenceDate,
+      expectedAmount,
     })
 
     const auditNote = occurrenceDate ? `$${payTotal} (${occurrenceDate})` : `$${payTotal}`
     await logReservationChange(user.id, reservation.id, 'totalPayment', null, `Pago: ${auditNote}`)
 
+    reservationCalendarCache.invalidateFor(reservation.startTime)
     return response.ok(reservation)
   }
 
@@ -1349,6 +1460,7 @@ export default class ReservationsController {
     reservation.cancelledBy = null
     await reservation.save()
     await logReservationChange(user.id, reservation.id, 'status', 'cancelled', 'pending')
+    reservationCalendarCache.invalidateFor(reservation.startTime)
 
     return response.ok(reservation)
   }
@@ -1393,6 +1505,7 @@ export default class ReservationsController {
 
     await reservation.save()
     await logReservationChange(user.id, reservation.id, 'paymentReverted', auditOld, null)
+    reservationCalendarCache.invalidateFor(reservation.startTime)
 
     await reservation.load('payments')
     return response.ok(reservation)
@@ -1432,6 +1545,7 @@ export default class ReservationsController {
 
     await reservation.save()
     await logReservationChange(user.id, reservation.id, 'allPaymentsReverted', auditSummary, null)
+    reservationCalendarCache.invalidateFor(reservation.startTime)
 
     await reservation.load('payments')
     return response.ok(reservation)
