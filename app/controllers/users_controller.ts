@@ -72,6 +72,7 @@ export default class UsersController {
     const page = Math.max(1, Number(request.input('page', 1)) || 1)
     const perPage = Math.min(100, Math.max(1, Number(request.input('perPage', 20)) || 20))
     const roleFilter = request.input('role')
+    const rolesFilter = String(request.input('roles', '') || '').trim()
     const category = request.input('category')
     const search = String(request.input('search', '') || '').trim()
 
@@ -83,6 +84,11 @@ export default class UsersController {
     }
 
     if (roleFilter) query.where('role', roleFilter)
+    // Multi-role filter (CSV), e.g. roles=admin,worker for staff-only pickers.
+    if (rolesFilter) {
+      const roles = rolesFilter.split(',').map((r) => r.trim()).filter(Boolean)
+      if (roles.length) query.whereIn('role', roles)
+    }
 
     if (category === 'null') query.whereNull('padel_category')
     else if (category) query.where('padel_category', category)
