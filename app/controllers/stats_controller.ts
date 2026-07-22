@@ -32,130 +32,54 @@ export default class StatsController {
     const fromDate = from.toISODate()  // YYYY-MM-DD for occurrence_date comparisons
     const toDate = to.toISODate()
 
-    // ── Court revenue ──
-    // Non-recurring: use stored total_price (when total_paid or deposit_paid).
-    // Recurring: use historical price per paid occurrence (by occurrence_date).
-    //   - Payments with occurrence_date in range → price from court_price_history at that date.
-    //   - Payments without occurrence_date (pre-migration) → fall back to stored total_price.
+    // ── Court revenue = ALL money COLLECTED per court in the period ──
+    // Every payment belongs to a reservation, which belongs to a court, so all collected
+    // money (including señas of not-yet-saldadas) is attributed to its court. This makes
+    // the per-court total equal the "Formas de pago" (caja) total — same money, split by
+    // court. The reconciliation below then breaks that total into facturado vs señas.
+    // reservation_payments.total is the collected amount; when filtering by payment method
+    // we sum that method's column instead.
+    // completed_reservations still counts only BILLED items (non-rec total_paid=1;
+    // recurring occurrences with a type='total' payment).
+    const revenueExpr = paymentMethod === 'efectivo' ? 'rp.efectivo'
+      : paymentMethod === 'transferencia' ? 'rp.transferencia'
+      : paymentMethod === 'postnet' ? 'rp.postnet'
+      : 'rp.total'
 
-    let courtQuery: string
-    let courtParams: any[]
-
-    if (paymentMethod) {
-      // When filtering by payment method, revenue comes only from payment records
-      const col = paymentMethod === 'efectivo' ? 'rp.efectivo'
-        : paymentMethod === 'transferencia' ? 'rp.transferencia'
-        : 'rp.postnet'
-
-      courtQuery = `
-        SELECT
-          c.id,
-          c.name,
-          c.type,
-          (COUNT(DISTINCT CASE WHEN r.is_recurring = 0 AND r.total_paid = 1 THEN r.id END)
-            + COUNT(DISTINCT CASE WHEN r.is_recurring = 1 AND rp.id IS NOT NULL THEN rp.id END)) AS completed_reservations,
-          COALESCE(SUM(${col}), 0) AS total_revenue
-        FROM courts c
-        LEFT JOIN reservations r
-          ON r.court_id = c.id
-          AND r.status != 'cancelled'
-        LEFT JOIN reservation_payments rp
-          ON rp.reservation_id = r.id
-          AND rp.type = 'total'
-          AND (
-            (r.is_recurring = 0 AND r.start_time >= ? AND r.start_time <= ?)
-            OR (r.is_recurring = 1 AND rp.occurrence_date IS NOT NULL AND rp.occurrence_date >= ? AND rp.occurrence_date <= ?)
-            OR (r.is_recurring = 1 AND rp.occurrence_date IS NULL AND r.start_time >= ? AND r.start_time <= ?)
-          )
-        WHERE c.id IS NOT NULL
-        GROUP BY c.id, c.name, c.type
-        ORDER BY total_revenue DESC, c.name ASC
-      `
-      courtParams = [fromSQL, toSQL, fromDate, toDate, fromSQL, toSQL]
-    } else {
-      // Without payment method filter: compute historical price for recurring paid occurrences
-      courtQuery = `
-        SELECT
-          c.id,
-          c.name,
-          c.type,
-          (COUNT(DISTINCT CASE WHEN r.is_recurring = 0 AND r.total_paid = 1 THEN r.id END)
-            + COUNT(DISTINCT CASE WHEN r.is_recurring = 1 AND rp.id IS NOT NULL THEN rp.id END)) AS completed_reservations,
-          COALESCE(
-            SUM(
-              CASE
-                -- Non-recurring: use stored total_price when paid
-                WHEN r.is_recurring = 0 AND r.total_paid = 1 THEN r.total_price
-                -- Recurring with occurrence_date: look up historical price for that date
-                WHEN r.is_recurring = 1 AND rp.occurrence_date IS NOT NULL THEN (
-                  SELECT
-                    COALESCE(
-                      -- Padel: match the occurrence start hour to price range, then apply the reservation's discount
-                      (SELECT
-                        CASE
-                          WHEN TIME_TO_SEC(CONVERT_TZ(r.start_time, '+00:00', '-03:00')) / 3600 < cph2.end_hour
-                            AND TIME_TO_SEC(CONVERT_TZ(r.start_time, '+00:00', '-03:00')) / 3600 >= cph2.start_hour
-                          THEN
-                            (CASE
-                              WHEN TIMESTAMPDIFF(MINUTE, r.start_time, r.end_time) = 60 AND cph2.price_60_min IS NOT NULL THEN cph2.price_60_min
-                              WHEN TIMESTAMPDIFF(MINUTE, r.start_time, r.end_time) = 90 AND cph2.price_90_min IS NOT NULL THEN cph2.price_90_min
-                              WHEN TIMESTAMPDIFF(MINUTE, r.start_time, r.end_time) = 120 AND cph2.price_120_min IS NOT NULL THEN cph2.price_120_min
-                              ELSE cph2.price_per_hour * TIMESTAMPDIFF(MINUTE, r.start_time, r.end_time) / 60
-                            END) * (1 - r.discount_percentage / 100)
-                          ELSE NULL
-                        END
-                        FROM court_price_history cph2
-                        WHERE cph2.court_id = r.court_id
-                          AND cph2.effective_from = (
-                            SELECT MAX(cph3.effective_from)
-                            FROM court_price_history cph3
-                            WHERE cph3.court_id = r.court_id
-                              AND cph3.effective_from <= CONCAT(rp.occurrence_date, 'T00:00:00.000Z')
-                          )
-                          AND TIME_TO_SEC(CONVERT_TZ(r.start_time, '+00:00', '-03:00')) / 3600 >= cph2.start_hour
-                          AND TIME_TO_SEC(CONVERT_TZ(r.start_time, '+00:00', '-03:00')) / 3600 < cph2.end_hour
-                        LIMIT 1
-                      ),
-                      -- Fallback: stored total_price
-                      r.total_price
-                    )
-                )
-                -- Recurring without occurrence_date (pre-migration): use stored total_price
-                WHEN r.is_recurring = 1 AND rp.occurrence_date IS NULL THEN r.total_price
-                ELSE 0
-              END
-            ),
-            0
-          ) AS total_revenue
-        FROM courts c
-        LEFT JOIN reservations r
-          ON r.court_id = c.id
-          AND r.status != 'cancelled'
-          AND (
-            (r.is_recurring = 0 AND r.start_time >= ? AND r.start_time <= ?)
-            OR (r.is_recurring = 1 AND EXISTS (
-              SELECT 1 FROM reservation_payments rp2
-              WHERE rp2.reservation_id = r.id
-                AND rp2.type = 'total'
-                AND (
-                  (rp2.occurrence_date IS NOT NULL AND rp2.occurrence_date >= ? AND rp2.occurrence_date <= ?)
-                  OR (rp2.occurrence_date IS NULL AND r.start_time >= ? AND r.start_time <= ?)
-                )
-            ))
-          )
-        LEFT JOIN reservation_payments rp
-          ON rp.reservation_id = r.id
-          AND rp.type = 'total'
-          AND (
-            (r.is_recurring = 0)
-            OR (r.is_recurring = 1 AND rp.occurrence_date IS NOT NULL AND rp.occurrence_date >= ? AND rp.occurrence_date <= ?)
-            OR (r.is_recurring = 1 AND rp.occurrence_date IS NULL AND r.start_time >= ? AND r.start_time <= ?)
-          )
-        GROUP BY c.id, c.name, c.type
-        ORDER BY total_revenue DESC, c.name ASC
-      `
-      courtParams = [fromSQL, toSQL, fromDate, toDate, fromSQL, toSQL, fromDate, toDate, fromSQL, toSQL]
-    }
+    const courtQuery = `
+      SELECT
+        c.id,
+        c.name,
+        c.type,
+        (COUNT(DISTINCT CASE WHEN r.is_recurring = 0 AND r.total_paid = 1 THEN r.id END)
+          + COUNT(DISTINCT CASE WHEN r.is_recurring = 1 AND rp.type = 'total' THEN rp.id END)) AS completed_reservations,
+        COALESCE(SUM(${revenueExpr}), 0) AS total_revenue
+      FROM courts c
+      LEFT JOIN reservations r
+        ON r.court_id = c.id
+        AND r.status != 'cancelled'
+        AND (
+          (r.is_recurring = 0 AND r.start_time >= ? AND r.start_time <= ?)
+          OR (r.is_recurring = 1 AND EXISTS (
+            SELECT 1 FROM reservation_payments rp2
+            WHERE rp2.reservation_id = r.id
+              AND (
+                (rp2.occurrence_date IS NOT NULL AND rp2.occurrence_date >= ? AND rp2.occurrence_date <= ?)
+                OR (rp2.occurrence_date IS NULL AND r.start_time >= ? AND r.start_time <= ?)
+              )
+          ))
+        )
+      LEFT JOIN reservation_payments rp
+        ON rp.reservation_id = r.id
+        AND (
+          (r.is_recurring = 0)
+          OR (r.is_recurring = 1 AND rp.occurrence_date IS NOT NULL AND rp.occurrence_date >= ? AND rp.occurrence_date <= ?)
+          OR (r.is_recurring = 1 AND rp.occurrence_date IS NULL AND r.start_time >= ? AND r.start_time <= ?)
+        )
+      GROUP BY c.id, c.name, c.type
+      ORDER BY total_revenue DESC, c.name ASC
+    `
+    const courtParams = [fromSQL, toSQL, fromDate, toDate, fromSQL, toSQL, fromDate, toDate, fromSQL, toSQL]
 
     const courts = await db.rawQuery(courtQuery, courtParams)
     const rows = courts[0] as any[]
@@ -267,6 +191,49 @@ export default class StatsController {
       paymentCount: Number(bRow.payment_count),
     }
 
+    // ── Reconciliation: why "total cobrado" (caja) ≠ "ingresos por cancha" ──
+    // The court-revenue total counts only reservations considered billed:
+    //   - non-recurring with total_paid = 1
+    //   - recurring occurrences that have a type='total' payment for that occurrence_date
+    // "Señas sin saldar" = money collected on payment rows whose reservation/occurrence is
+    // NOT billed yet (deposits/partials). It's in caja but not in ingresos.
+    const senasRes = await db.rawQuery(`
+      SELECT COALESCE(SUM(rp.total), 0) AS senas
+      FROM reservation_payments rp
+      INNER JOIN reservations r ON r.id = rp.reservation_id
+      WHERE r.status != 'cancelled'
+        AND (
+          (r.is_recurring = 0 AND r.start_time >= ? AND r.start_time <= ?)
+          OR (r.is_recurring = 1 AND rp.occurrence_date IS NOT NULL AND rp.occurrence_date >= ? AND rp.occurrence_date <= ?)
+          OR (r.is_recurring = 1 AND rp.occurrence_date IS NULL AND r.start_time >= ? AND r.start_time <= ?)
+        )
+        AND NOT (
+          (r.is_recurring = 0 AND r.total_paid = 1)
+          OR (r.is_recurring = 1 AND EXISTS (
+            SELECT 1 FROM reservation_payments rpt
+            WHERE rpt.reservation_id = r.id
+              AND rpt.type = 'total'
+              AND (
+                (rp.occurrence_date IS NOT NULL AND rpt.occurrence_date = rp.occurrence_date)
+                OR (rp.occurrence_date IS NULL AND rpt.occurrence_date IS NULL)
+              )
+          ))
+        )
+    `, [fromSQL, toSQL, fromDate, toDate, fromSQL, toSQL])
+    const senasSinSaldar = Math.round(Number((senasRes[0] as any[])[0]?.senas || 0) * 100) / 100
+
+    // grandTotal now equals the caja total; the reconciliation splits it into facturado
+    // (billed reservations) vs señas of not-yet-saldadas. No separate totals:
+    //   grandTotal = cajaTotal = facturado + senasSinSaldar
+    const cajaTotal = paymentBreakdown.totalPayments
+    const facturado = Math.round((grandTotal - senasSinSaldar) * 100) / 100
+    const reconciliation = {
+      total: grandTotal,
+      facturado,
+      senasSinSaldar,
+      cajaTotal,
+    }
+
     return response.ok({
       period,
       from: from.toISO(),
@@ -274,6 +241,7 @@ export default class StatsController {
       courts: result,
       grandTotal,
       paymentBreakdown,
+      reconciliation,
     })
   }
 }
