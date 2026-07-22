@@ -53,7 +53,21 @@ export default class StatsController {
         c.type,
         (COUNT(DISTINCT CASE WHEN r.is_recurring = 0 AND r.total_paid = 1 THEN r.id END)
           + COUNT(DISTINCT CASE WHEN r.is_recurring = 1 AND rp.type = 'total' THEN rp.id END)) AS completed_reservations,
-        COALESCE(SUM(${revenueExpr}), 0) AS total_revenue
+        COALESCE(SUM(${revenueExpr}), 0) AS total_revenue,
+        COALESCE(SUM(
+          CASE WHEN (
+            (r.is_recurring = 0 AND r.total_paid = 1)
+            OR (r.is_recurring = 1 AND EXISTS (
+              SELECT 1 FROM reservation_payments rpt
+              WHERE rpt.reservation_id = r.id
+                AND rpt.type = 'total'
+                AND (
+                  (rp.occurrence_date IS NOT NULL AND rpt.occurrence_date = rp.occurrence_date)
+                  OR (rp.occurrence_date IS NULL AND rpt.occurrence_date IS NULL)
+                )
+            ))
+          ) THEN ${revenueExpr} ELSE 0 END
+        ), 0) AS billed_revenue
       FROM courts c
       LEFT JOIN reservations r
         ON r.court_id = c.id
@@ -90,6 +104,8 @@ export default class StatsController {
       completedReservations: Number(r.completed_reservations),
       totalReservations: 0,
       totalRevenue: Number(r.total_revenue),
+      billedRevenue: Number(r.billed_revenue),
+      senaRevenue: Math.round((Number(r.total_revenue) - Number(r.billed_revenue)) * 100) / 100,
     }))
 
     const grandTotal = result.reduce((s, c) => s + c.totalRevenue, 0)
