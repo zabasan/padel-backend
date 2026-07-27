@@ -295,18 +295,6 @@ export interface Registry {
       errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/reservations_controller').default['payTotal']>>>
     }
   }
-  'reservations.increment_games': {
-    methods: ["PATCH"]
-    pattern: '/api/v1/reservations/:id/increment-games'
-    types: {
-      body: {}
-      paramsTuple: [ParamValue]
-      params: { id: ParamValue }
-      query: {}
-      response: ExtractResponse<Awaited<ReturnType<import('#controllers/reservations_controller').default['incrementGames']>>>
-      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/reservations_controller').default['incrementGames']>>>
-    }
-  }
   'reservations.audit_logs': {
     methods: ["GET","HEAD"]
     pattern: '/api/v1/reservations/:id/audit'

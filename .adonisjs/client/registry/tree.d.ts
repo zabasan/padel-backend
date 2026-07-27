@@ -33,7 +33,6 @@ export interface ApiDefinition {
     showNext: typeof routes['reservations.show_next']
     payDeposit: typeof routes['reservations.pay_deposit']
     payTotal: typeof routes['reservations.pay_total']
-    incrementGames: typeof routes['reservations.increment_games']
     auditLogs: typeof routes['reservations.audit_logs']
     revert: typeof routes['reservations.revert']
     revertPayment: typeof routes['reservations.revert_payment']

@@ -66,7 +66,6 @@ router
             router.patch('reservations/:id/show-next', [controllers.Reservations, 'showNext'])
             router.patch('reservations/:id/pay-deposit', [controllers.Reservations, 'payDeposit'])
             router.patch('reservations/:id/pay-total', [controllers.Reservations, 'payTotal'])
-            router.patch('reservations/:id/increment-games', [controllers.Reservations, 'incrementGames'])
             router.get('reservations/:id/audit', [controllers.Reservations, 'auditLogs'])
             router.patch('reservations/:id/revert', [controllers.Reservations, 'revert'])
             router.delete('reservations/:id/payments/:paymentId', [controllers.Reservations, 'revertPayment'])

@@ -198,8 +198,11 @@ type PriceCache = {
 async function calcRecurringOccurrencePrice(
   reservation: Reservation,
   occurrenceDate: DateTime,
-  opts: { court?: Court; targetUser?: User | null; cache?: PriceCache } = {}
+  opts: { court?: Court; targetUser?: User | null; cache?: PriceCache; freeGame?: boolean } = {}
 ): Promise<number | null> {
+  // Free-game occurrence is always $0, even for a manual customPrice override — this is the
+  // single place that zeroes both the display `occurrencePrice` and the stored `expectedAmount`.
+  if (opts.freeGame) return 0
   if (reservation.customPrice != null) return null
 
   const court = opts.court ?? await Court.query().where('id', reservation.courtId).firstOrFail()
@@ -272,6 +275,18 @@ function nextOccurrenceDate(reservation: Reservation, from: DateTime): DateTime 
   return candidate
 }
 
+// Hidden-date-aware "next due" occurrence: like `nextOccurrenceDate`, but skips any
+// candidate that is already in the hidden-dates set, landing on the true next playable
+// occurrence. Used wherever "next occurrence" needs to account for already-hidden dates
+// (promo/price/paid anchor, payment-driven streak increment, hide-time reset check).
+function nextDueOccurrence(reservation: Reservation, from: DateTime, hiddenDateStrs: string[]): DateTime {
+  let candidate = nextOccurrenceDate(reservation, from)
+  while (hiddenDateStrs.includes(candidate.toISODate()!)) {
+    candidate = candidate.plus({ weeks: 1 })
+  }
+  return candidate
+}
+
 function timeInMinutes(dt: DateTime): number {
   const art = dt.setZone(ART_TZ)
   return art.hour * 60 + art.minute
@@ -333,6 +348,21 @@ function effectiveConsecutiveGames(
   return streak
 }
 
+// Returns whether the NEXT occurrence for a recurring reservation is the promo's free game,
+// i.e. the effective streak has reached the cycle-boundary position (>= promo.games within
+// the games+freeGames cycle). Extracted from the serializer so payTotal/show/index share it.
+function isOccurrenceFree(
+  r: Reservation,
+  promo: { enabled: boolean; games: number; freeGames: number },
+  hiddenDateStrs: string[]
+): boolean {
+  if (!r.isRecurring || !promo.enabled || promo.games <= 0) return false
+  const cycle = promo.games + promo.freeGames
+  const effectiveGames = effectiveConsecutiveGames(r, hiddenDateStrs)
+  const posInCycle = effectiveGames % cycle
+  return posInCycle >= promo.games
+}
+
 function toDateStr(val: unknown): string | null {
   if (!val) return null
   if (typeof val === 'string') return val.slice(0, 10)
@@ -380,6 +410,68 @@ async function logReservationChange(performedBy: number, reservationId: number, 
   await ReservationAuditLog.create({ performedBy, reservationId, field, oldValue, newValue })
 }
 
+// Attaches per-occurrence payment state, promo info (including `isFreeGame`) and the
+// current occurrence price to a reservation's serialized object. Shared by `index`'s
+// row serializer and by `show`, so both endpoints return the same promo fields (parity).
+// `hiddenDateStrs` must already be resolved (flat array of "YYYY-MM-DD" strings).
+async function attachPromoFields(
+  obj: Record<string, any>,
+  r: Reservation,
+  promo: { enabled: boolean; games: number; freeGames: number },
+  nowART: DateTime,
+  hiddenDateStrs: string[],
+  cache?: PriceCache
+): Promise<void> {
+  if (!r.isRecurring) {
+    obj.isFreeGame = false
+    return
+  }
+
+  // Per-occurrence TOTAL payment state for recurring reservations. The series-level
+  // `totalPaid` boolean is unreliable across occurrences, so derive each occurrence's
+  // paid state from ReservationPayment rows keyed by occurrence_date. The deposit is
+  // intentionally NOT per-occurrence — for a fija it's a one-time hold for the series.
+  const totalDates: string[] = []
+  for (const p of r.payments ?? []) {
+    if (p.occurrenceDate && p.type === 'total') totalDates.push(p.occurrenceDate)
+  }
+  obj.paidOccurrences = totalDates
+  const nextDue = nextDueOccurrence(r, nowART, hiddenDateStrs)
+  const nextDateStr = nextDue.toISODate()
+  obj.totalPaid = nextDateStr != null && totalDates.includes(nextDateStr)
+  obj.carryBalance = computeCarryBalance(r)
+
+  const isFree = isOccurrenceFree(r, promo, hiddenDateStrs)
+  if (promo.enabled && promo.games > 0) {
+    const cycle = promo.games + promo.freeGames
+    const effectiveGames = effectiveConsecutiveGames(r, hiddenDateStrs)
+    obj.isFreeGame = isFree
+    obj.consecutiveGamesDisplay = effectiveGames
+    obj.freeGamePosition = promo.games
+    obj.promoCycle = cycle
+  } else {
+    obj.isFreeGame = false
+  }
+
+  // Compute the price at the next due occurrence so the UI shows the current price
+  // rather than the stale stored one. Zeroed automatically when it's the free game.
+  if (r.customPrice == null) {
+    try {
+      const occurrencePrice = await calcRecurringOccurrencePrice(r, nextDue, {
+        court: r.court,
+        targetUser: r.user,
+        cache,
+        freeGame: obj.isFreeGame,
+      })
+      if (occurrencePrice !== null) {
+        obj.occurrencePrice = occurrencePrice
+      }
+    } catch {
+      // If price calc fails, fall back to stored totalPrice — never crash the listing
+    }
+  }
+}
+
 // Serializes a reservation for the listing, attaching per-occurrence payment state, promo
 // info and the current occurrence price for recurring rows. Shared by the paginated and
 // legacy (array) branches of `index`.
@@ -393,46 +485,7 @@ async function serializeReservationRow(
   // Serialize hidden dates as a flat array of date strings
   obj.hiddenDates = (r.hiddenDates ?? []).map(hd => toDateStr(hd.hiddenDate)).filter(Boolean)
 
-  // Per-occurrence TOTAL payment state for recurring reservations. The series-level
-  // `totalPaid` boolean is unreliable across occurrences, so derive each occurrence's
-  // paid state from ReservationPayment rows keyed by occurrence_date. The deposit is
-  // intentionally NOT per-occurrence — for a fija it's a one-time hold for the series.
-  if (r.isRecurring) {
-    const totalDates: string[] = []
-    for (const p of r.payments ?? []) {
-      if (p.occurrenceDate && p.type === 'total') totalDates.push(p.occurrenceDate)
-    }
-    obj.paidOccurrences = totalDates
-    const nextDateStr = nextOccurrenceDate(r, nowART).toISODate()
-    obj.totalPaid = nextDateStr != null && totalDates.includes(nextDateStr)
-    obj.carryBalance = computeCarryBalance(r)
-  }
-
-  if (r.isRecurring && promo.enabled && promo.games > 0) {
-    const cycle = promo.games + promo.freeGames
-    const effectiveGames = effectiveConsecutiveGames(r, obj.hiddenDates)
-    const posInCycle = effectiveGames % cycle
-    obj.isFreeGame = posInCycle >= promo.games
-    obj.consecutiveGamesDisplay = effectiveGames
-    obj.freeGamePosition = promo.games
-    obj.promoCycle = cycle
-  } else {
-    obj.isFreeGame = false
-  }
-
-  // For recurring reservations, compute the price at the next upcoming occurrence
-  // so the UI shows the current price rather than the stale stored one.
-  if (r.isRecurring && r.customPrice == null) {
-    try {
-      const nextOccurrence = nextOccurrenceDate(r, nowART)
-      const occurrencePrice = await calcRecurringOccurrencePrice(r, nextOccurrence, { court: r.court, targetUser: r.user, cache })
-      if (occurrencePrice !== null) {
-        obj.occurrencePrice = occurrencePrice
-      }
-    } catch {
-      // If price calc fails, fall back to stored totalPrice — never crash the listing
-    }
-  }
+  await attachPromoFields(obj, r, promo, nowART, obj.hiddenDates, cache)
 
   return obj
 }
@@ -624,6 +677,7 @@ export default class ReservationsController {
       .preload('user')
       .preload('customer')
       .preload('payments')
+      .preload('hiddenDates')
       .firstOrFail()
 
     if ((user.role === 'customer' || user.role === 'professor') && reservation.userId !== user.id) {
@@ -631,20 +685,25 @@ export default class ReservationsController {
     }
 
     const obj = reservation.toJSON()
+    obj.hiddenDates = (reservation.hiddenDates ?? []).map(hd => toDateStr(hd.hiddenDate)).filter(Boolean)
 
-    // Series-level carry balance (deuda/crédito), independent of the requested occurrence date.
-    if (reservation.isRecurring) obj.carryBalance = computeCarryBalance(reservation)
+    // Attach promo fields (isFreeGame, occurrencePrice, totalPaid, carryBalance) at parity
+    // with the index listing — the modal refetches via this endpoint and needs live isFreeGame.
+    const promo = await getRecurringPromoSettings()
+    const nowART = DateTime.now().setZone(ART_TZ)
+    await attachPromoFields(obj, reservation, promo, nowART, obj.hiddenDates)
 
     // For a recurring reservation, the price effective on each occurrence may differ
     // (e.g. court prices changed over time). When the caller asks about a specific
     // occurrence date, compute the price that was effective on that date rather than
-    // the stored/next-occurrence value.
+    // the next-due-occurrence value attachPromoFields just set.
     const dateParam = request.input('date')
     if (dateParam && reservation.isRecurring && reservation.customPrice == null) {
       const occurrenceDate = DateTime.fromISO(dateParam, { zone: ART_TZ })
       if (occurrenceDate.isValid) {
         try {
-          const occurrencePrice = await calcRecurringOccurrencePrice(reservation, occurrenceDate)
+          const isFree = isOccurrenceFree(reservation, promo, obj.hiddenDates)
+          const occurrencePrice = await calcRecurringOccurrencePrice(reservation, occurrenceDate, { freeGame: isFree })
           if (occurrencePrice !== null) obj.occurrencePrice = occurrencePrice
         } catch {
           // Fall back to stored totalPrice — never fail the request over price calc
@@ -1137,6 +1196,13 @@ export default class ReservationsController {
     const reservation = await Reservation.findOrFail(params.id)
     if (!reservation.isRecurring) return response.badRequest({ message: 'La reserva no es recurrente' })
 
+    // Hidden dates that existed BEFORE this hide, used to resolve the true next-due
+    // occurrence (hidden-date-aware) — the newly hidden date itself must NOT count yet.
+    await reservation.load('hiddenDates')
+    const existingHiddenStrs = (reservation.hiddenDates ?? [])
+      .map(hd => toDateStr(hd.hiddenDate))
+      .filter((v): v is string => v != null)
+
     const dateParam = request.input('date') // YYYY-MM-DD of the specific occurrence to hide
     let targetDateStr: string
 
@@ -1149,31 +1215,23 @@ export default class ReservationsController {
       targetDateStr = next.toISODate()!
     }
 
+    // Reset-on-hide: hiding the immediate next-due occurrence resets the streak to 0,
+    // always (paid or not). Farther-future hides never touch it (spec: "Reset Streak Only
+    // on Next-Due Hide"). "Next-due" skips dates already hidden before this one.
+    const nowART = DateTime.now().setZone(ART_TZ)
+    const nextDue = nextDueOccurrence(reservation, nowART, existingHiddenStrs)
+    const isNextDue = nextDue.toISODate() === targetDateStr
+
     // Insert into pivot table (ignore duplicate)
     await ReservationHiddenDate.updateOrCreate(
       { reservationId: reservation.id, hiddenDate: targetDateStr },
       { reservationId: reservation.id, hiddenDate: targetDateStr }
     )
 
-    // If this hidden date corresponds to the occurrence that was already incremented,
-    // roll back the consecutive games counter so the promo cycle stays correct.
-    if (reservation.lastIncrementedAt) {
-      const resStartART = reservation.startTime.setZone(ART_TZ)
-      const hiddenDt = DateTime.fromISO(targetDateStr, { zone: ART_TZ }).set({
-        hour: resStartART.hour,
-        minute: resStartART.minute,
-        second: 0,
-        millisecond: 0,
-      })
-      const incrementedDt = reservation.lastIncrementedAt.setZone(ART_TZ)
-      // Same occurrence if lastIncrementedAt falls within the same day as the hidden date
-      if (incrementedDt >= hiddenDt && incrementedDt < hiddenDt.plus({ days: 1 })) {
-        if (reservation.consecutiveGames > 0) {
-          reservation.consecutiveGames -= 1
-        }
-        reservation.lastIncrementedAt = null
-        await reservation.save()
-      }
+    if (isNextDue) {
+      reservation.consecutiveGames = 0
+      reservation.lastIncrementedAt = null
+      await reservation.save()
     }
 
     await logReservationChange(user.id, reservation.id, 'hiddenDate', null, targetDateStr)
@@ -1182,69 +1240,6 @@ export default class ReservationsController {
     const obj = reservation.toJSON()
     obj.hiddenDates = (reservation.hiddenDates ?? []).map(hd => toDateStr(hd.hiddenDate)).filter(Boolean)
     return response.ok(obj)
-  }
-
-  async incrementGames({ params, auth, response }: HttpContext) {
-    const user = auth.user!
-    if (user.role === 'customer' || user.role === 'professor') return response.forbidden({ message: 'Sin permisos' })
-
-    const reservation = await Reservation.findOrFail(params.id)
-    if (!reservation.isRecurring) return response.badRequest({ message: 'La reserva no es recurrente' })
-
-    // Idempotency: find this week's occurrence datetime and skip if already incremented
-    const now = DateTime.now().setZone(ART_TZ)
-    const resStartART = reservation.startTime.setZone(ART_TZ)
-    const weekday = resStartART.weekday // 1=Mon ... 7=Sun
-    // Find the most recent past occurrence (same weekday + time)
-    let occurrence = now.set({
-      hour: resStartART.hour,
-      minute: resStartART.minute,
-      second: 0,
-      millisecond: 0,
-    })
-    const daysBack = ((now.weekday - weekday + 7) % 7)
-    occurrence = occurrence.minus({ days: daysBack })
-    // If occurrence is in the future (same weekday but later today), go back one week
-    if (occurrence > now) occurrence = occurrence.minus({ weeks: 1 })
-
-    if (reservation.lastIncrementedAt && reservation.lastIncrementedAt >= occurrence) {
-      // Already incremented for this occurrence — no-op
-      return response.ok(reservation)
-    }
-
-    const promo = await getRecurringPromoSettings()
-
-    // Check if a hidden occurrence fell between lastIncrementedAt and now — streak broken
-    await reservation.load('hiddenDates')
-    const lastIncremented = reservation.lastIncrementedAt
-    const streakBroken = (reservation.hiddenDates ?? []).some((hd) => {
-      const hdDt = DateTime.fromISO(
-        typeof hd.hiddenDate === 'string' ? hd.hiddenDate : hd.hiddenDate,
-        { zone: ART_TZ }
-      ).set({ hour: resStartART.hour, minute: resStartART.minute, second: 0, millisecond: 0 })
-      const afterLast = lastIncremented ? hdDt > lastIncremented : hdDt >= resStartART.startOf('day')
-      return afterLast && hdDt < occurrence
-    })
-
-    if (streakBroken) {
-      reservation.consecutiveGames = 0
-    }
-
-    reservation.consecutiveGames += 1
-    reservation.lastIncrementedAt = now
-    // Reset totalPaid so the payment button reappears for the next occurrence
-    reservation.totalPaid = false
-
-    // Auto-reset after completing free games
-    if (promo.enabled && promo.games > 0 && promo.freeGames > 0) {
-      const cycle = promo.games + promo.freeGames
-      if (reservation.consecutiveGames >= cycle) {
-        reservation.consecutiveGames = 0
-      }
-    }
-
-    await reservation.save()
-    return response.ok(reservation)
   }
 
   async payDeposit({ params, request, auth, response }: HttpContext) {
@@ -1312,13 +1307,37 @@ export default class ReservationsController {
 
     // For recurring reservations, payment is tracked per occurrence date, and we freeze the
     // base price expected for that occurrence so the series carry balance can be derived.
+    // The occurrence is hidden-date-aware (nextDueOccurrence) and the promo cycle position is
+    // resolved once here so both the expected amount and the streak increment below agree on
+    // whether this is the free game.
     let occurrenceDate: string | null = null
     let expectedAmount: number | null = null
+    let occurrenceStartART: DateTime | null = null
+    let hiddenStrs: string[] = []
+    let isFree = false
     if (reservation.isRecurring) {
+      await reservation.load('hiddenDates')
+      hiddenStrs = (reservation.hiddenDates ?? [])
+        .map(hd => toDateStr(hd.hiddenDate))
+        .filter((v): v is string => v != null)
+
       const nowART = DateTime.now().setZone(ART_TZ)
-      const nextOcc = nextOccurrenceDate(reservation, nowART)
+      const nextOcc = nextDueOccurrence(reservation, nowART, hiddenStrs)
       occurrenceDate = nextOcc.toISODate()
-      expectedAmount = (await calcRecurringOccurrencePrice(reservation, nextOcc)) ?? Number(reservation.totalPrice)
+
+      const resStartART = reservation.startTime.setZone(ART_TZ)
+      occurrenceStartART = nextOcc.setZone(ART_TZ).set({
+        hour: resStartART.hour,
+        minute: resStartART.minute,
+        second: 0,
+        millisecond: 0,
+      })
+
+      const promo = await getRecurringPromoSettings()
+      isFree = isOccurrenceFree(reservation, promo, hiddenStrs)
+      expectedAmount = isFree
+        ? 0
+        : (await calcRecurringOccurrencePrice(reservation, nextOcc)) ?? Number(reservation.totalPrice)
     }
 
     // For reservations with a deposit requirement, the (one-time, series-level) deposit must be
@@ -1351,6 +1370,41 @@ export default class ReservationsController {
     reservation.totalPaidBy = user.id
     reservation.totalPaidCount = (reservation.totalPaidCount || 0) + 1
     if (receipt) reservation.totalReceipt = receipt
+
+    // Payment-driven loyalty streak: TOTAL payment is the single source of truth for
+    // `consecutiveGames`. This site is guarded by the per-occurrence ReservationPayment
+    // check right above, so it executes exactly once per occurrence (idempotent by
+    // construction — no separate guard needed). Ported from the deleted `incrementGames`:
+    // a hidden occurrence strictly between the last increment and the one being paid now
+    // breaks the streak before the +1 is applied.
+    if (reservation.isRecurring && occurrenceStartART) {
+      const resStartART = reservation.startTime.setZone(ART_TZ)
+      const lastIncremented = reservation.lastIncrementedAt
+      const streakBroken = hiddenStrs.some((dateStr) => {
+        const hdDt = DateTime.fromISO(dateStr, { zone: ART_TZ }).set({
+          hour: resStartART.hour,
+          minute: resStartART.minute,
+          second: 0,
+          millisecond: 0,
+        })
+        const afterLast = lastIncremented ? hdDt > lastIncremented : hdDt >= resStartART.startOf('day')
+        return afterLast && hdDt < occurrenceStartART!
+      })
+
+      if (streakBroken) reservation.consecutiveGames = 0
+      reservation.consecutiveGames += 1
+      reservation.lastIncrementedAt = occurrenceStartART
+
+      // Auto-reset after completing the free game(s) in this cycle.
+      const promo = await getRecurringPromoSettings()
+      if (promo.enabled && promo.games > 0 && promo.freeGames > 0) {
+        const cycle = promo.games + promo.freeGames
+        if (reservation.consecutiveGames >= cycle) {
+          reservation.consecutiveGames = 0
+        }
+      }
+    }
+
     await reservation.save()
 
     // Record payment breakdown

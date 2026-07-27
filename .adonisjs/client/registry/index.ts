@@ -150,12 +150,6 @@ const routes = {
     tokens: [{"old":"/api/v1/reservations/:id/pay-total","type":0,"val":"api","end":""},{"old":"/api/v1/reservations/:id/pay-total","type":0,"val":"v1","end":""},{"old":"/api/v1/reservations/:id/pay-total","type":0,"val":"reservations","end":""},{"old":"/api/v1/reservations/:id/pay-total","type":1,"val":"id","end":""},{"old":"/api/v1/reservations/:id/pay-total","type":0,"val":"pay-total","end":""}],
     types: placeholder as Registry['reservations.pay_total']['types'],
   },
-  'reservations.increment_games': {
-    methods: ["PATCH"],
-    pattern: '/api/v1/reservations/:id/increment-games',
-    tokens: [{"old":"/api/v1/reservations/:id/increment-games","type":0,"val":"api","end":""},{"old":"/api/v1/reservations/:id/increment-games","type":0,"val":"v1","end":""},{"old":"/api/v1/reservations/:id/increment-games","type":0,"val":"reservations","end":""},{"old":"/api/v1/reservations/:id/increment-games","type":1,"val":"id","end":""},{"old":"/api/v1/reservations/:id/increment-games","type":0,"val":"increment-games","end":""}],
-    types: placeholder as Registry['reservations.increment_games']['types'],
-  },
   'reservations.audit_logs': {
     methods: ["GET","HEAD"],
     pattern: '/api/v1/reservations/:id/audit',
