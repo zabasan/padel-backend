@@ -287,6 +287,37 @@ function nextDueOccurrence(reservation: Reservation, from: DateTime, hiddenDateS
   return candidate
 }
 
+// Resolves which occurrence a per-occurrence action targets. An explicit `dateStr` (YYYY-MM-DD in
+// ART) wins, so a caller looking at a past occurrence acts on THAT one instead of the next future
+// week; it must be a real occurrence of the series (same weekday, on/after the series start, not
+// hidden). Callers that don't know the occurrence — the series-level listing, where "next" is the
+// intended meaning — omit it and get `nextDueOccurrence`. Invalid input is rejected rather than
+// falling back, so a bad date can never be silently charged to the wrong week.
+function resolveOccurrenceDate(
+  reservation: Reservation,
+  dateStr: string | null,
+  hiddenDateStrs: string[],
+  nowART: DateTime
+): { occurrence: DateTime } | { error: string } {
+  if (!dateStr) return { occurrence: nextDueOccurrence(reservation, nowART, hiddenDateStrs) }
+
+  const occurrence = DateTime.fromISO(dateStr, { zone: ART_TZ }).startOf('day')
+  if (!occurrence.isValid) return { error: 'Fecha de turno inválida' }
+
+  const resStartART = reservation.startTime.setZone(ART_TZ)
+  if (occurrence.weekday !== resStartART.weekday) {
+    return { error: 'La fecha no corresponde al día de la reserva fija' }
+  }
+  if (occurrence < resStartART.startOf('day')) {
+    return { error: 'La fecha es anterior al inicio de la reserva fija' }
+  }
+  if (hiddenDateStrs.includes(occurrence.toISODate()!)) {
+    return { error: 'Ese turno está oculto' }
+  }
+
+  return { occurrence }
+}
+
 function timeInMinutes(dt: DateTime): number {
   const art = dt.setZone(ART_TZ)
   return art.hour * 60 + art.minute
@@ -1307,9 +1338,10 @@ export default class ReservationsController {
 
     // For recurring reservations, payment is tracked per occurrence date, and we freeze the
     // base price expected for that occurrence so the series carry balance can be derived.
-    // The occurrence is hidden-date-aware (nextDueOccurrence) and the promo cycle position is
-    // resolved once here so both the expected amount and the streak increment below agree on
-    // whether this is the free game.
+    // The caller sends `occurrence_date` when it knows which week is being paid (the calendar
+    // shows one expanded occurrence at a time); without it we fall back to the next due one.
+    // The promo cycle position is resolved once here so both the expected amount and the streak
+    // increment below agree on whether this is the free game.
     let occurrenceDate: string | null = null
     let expectedAmount: number | null = null
     let occurrenceStartART: DateTime | null = null
@@ -1322,11 +1354,14 @@ export default class ReservationsController {
         .filter((v): v is string => v != null)
 
       const nowART = DateTime.now().setZone(ART_TZ)
-      const nextOcc = nextDueOccurrence(reservation, nowART, hiddenStrs)
-      occurrenceDate = nextOcc.toISODate()
+      const requestedDate = request.input('occurrence_date', null)
+      const resolved = resolveOccurrenceDate(reservation, requestedDate, hiddenStrs, nowART)
+      if ('error' in resolved) return response.badRequest({ message: resolved.error })
+      const targetOcc = resolved.occurrence
+      occurrenceDate = targetOcc.toISODate()
 
       const resStartART = reservation.startTime.setZone(ART_TZ)
-      occurrenceStartART = nextOcc.setZone(ART_TZ).set({
+      occurrenceStartART = targetOcc.setZone(ART_TZ).set({
         hour: resStartART.hour,
         minute: resStartART.minute,
         second: 0,
@@ -1337,7 +1372,7 @@ export default class ReservationsController {
       isFree = isOccurrenceFree(reservation, promo, hiddenStrs)
       expectedAmount = isFree
         ? 0
-        : (await calcRecurringOccurrencePrice(reservation, nextOcc)) ?? Number(reservation.totalPrice)
+        : (await calcRecurringOccurrencePrice(reservation, targetOcc)) ?? Number(reservation.totalPrice)
     }
 
     // For reservations with a deposit requirement, the (one-time, series-level) deposit must be
@@ -1393,7 +1428,12 @@ export default class ReservationsController {
 
       if (streakBroken) reservation.consecutiveGames = 0
       reservation.consecutiveGames += 1
-      reservation.lastIncrementedAt = occurrenceStartART
+      // The anchor only moves forward. Paying a late occurrence must not rewind it, or
+      // `effectiveConsecutiveGames` would re-count hidden dates the streak already consumed.
+      // The +1 above still applies — it is guarded by the per-occurrence payment check.
+      if (!reservation.lastIncrementedAt || occurrenceStartART > reservation.lastIncrementedAt) {
+        reservation.lastIncrementedAt = occurrenceStartART
+      }
 
       // Auto-reset after completing the free game(s) in this cycle.
       const promo = await getRecurringPromoSettings()

@@ -1,12 +1,18 @@
 import { test } from '@japa/runner'
 import testUtils from '@adonisjs/core/services/test_utils'
+import ReservationHiddenDate from '#models/reservation_hidden_date'
 import ReservationPayment from '#models/reservation_payment'
 import {
+  addCourtPriceHistory,
   createWorker,
   createCustomer,
   createPadelCourt,
   createRecurringReservation,
+  nowART,
   setPromoSettings,
+  todayISODate,
+  weeksAgoISODate,
+  weeksAheadISODate,
 } from './fixtures.js'
 
 // Payment-driven loyalty streak: `consecutiveGames` MUST advance exactly once when the
@@ -126,5 +132,212 @@ test.group('payTotal — streak advances on total payment', (group) => {
     const show = await client.get(`/api/v1/reservations/${reservation.id}`).loginAs(worker)
     show.assertStatus(200)
     assert.equal(Number(show.body().carryBalance), 0)
+  })
+})
+
+// A caller looking at one expanded occurrence sends `occurrence_date` so the payment lands on THAT
+// week. Without it, `payTotal` resolved the next due occurrence from "today", which charged a past
+// occurrence to the upcoming week (and froze that week's `expectedAmount` instead of the paid one).
+test.group('payTotal — charges the requested occurrence', (group) => {
+  group.each.setup(() => testUtils.db().withGlobalTransaction())
+
+  test('occurrence_date charges that past week instead of the next due one', async ({
+    client,
+    assert,
+  }) => {
+    const worker = await createWorker()
+    const court = await createPadelCourt(2000)
+    const customer = await createCustomer()
+    const reservation = await createRecurringReservation(court, customer, { consecutiveGames: 0 })
+    const pastOccurrence = weeksAgoISODate(1)
+
+    const response = await client
+      .patch(`/api/v1/reservations/${reservation.id}/pay-total`)
+      .loginAs(worker)
+      .json({ efectivo: 2000, occurrence_date: pastOccurrence })
+    response.assertStatus(200)
+
+    const payment = await ReservationPayment.query()
+      .where('reservation_id', reservation.id)
+      .where('type', 'total')
+      .firstOrFail()
+    assert.equal(payment.occurrenceDate, pastOccurrence)
+    assert.notEqual(payment.occurrenceDate, todayISODate())
+  })
+
+  test('omitting occurrence_date still charges the next due occurrence', async ({
+    client,
+    assert,
+  }) => {
+    const worker = await createWorker()
+    const court = await createPadelCourt(2000)
+    const customer = await createCustomer()
+    const reservation = await createRecurringReservation(court, customer, { consecutiveGames: 0 })
+
+    const response = await client
+      .patch(`/api/v1/reservations/${reservation.id}/pay-total`)
+      .loginAs(worker)
+      .json({ efectivo: 2000 })
+    response.assertStatus(200)
+
+    const payment = await ReservationPayment.query()
+      .where('reservation_id', reservation.id)
+      .where('type', 'total')
+      .firstOrFail()
+    assert.equal(payment.occurrenceDate, todayISODate())
+  })
+
+  test('expectedAmount freezes the price effective on the occurrence paid, not on today', async ({
+    client,
+    assert,
+  }) => {
+    const worker = await createWorker()
+    const court = await createPadelCourt(2000)
+    const customer = await createCustomer()
+    const reservation = await createRecurringReservation(court, customer, { consecutiveGames: 0 })
+
+    // Price rose to 9000 two days ago: the occurrence a week back is still worth 2000.
+    await addCourtPriceHistory(court, 2000, nowART().minus({ weeks: 10 }))
+    await addCourtPriceHistory(court, 9000, nowART().minus({ days: 2 }))
+
+    const past = await client
+      .patch(`/api/v1/reservations/${reservation.id}/pay-total`)
+      .loginAs(worker)
+      .json({ efectivo: 2000, occurrence_date: weeksAgoISODate(1) })
+    past.assertStatus(200)
+
+    const current = await client
+      .patch(`/api/v1/reservations/${reservation.id}/pay-total`)
+      .loginAs(worker)
+      .json({ efectivo: 9000, occurrence_date: todayISODate() })
+    current.assertStatus(200)
+
+    const pastPayment = await ReservationPayment.query()
+      .where('reservation_id', reservation.id)
+      .where('occurrence_date', weeksAgoISODate(1))
+      .firstOrFail()
+    const currentPayment = await ReservationPayment.query()
+      .where('reservation_id', reservation.id)
+      .where('occurrence_date', todayISODate())
+      .firstOrFail()
+
+    assert.equal(Number(pastPayment.expectedAmount), 2000)
+    assert.equal(Number(currentPayment.expectedAmount), 9000)
+  })
+
+  test('repeating the same occurrence_date is rejected, a different one is accepted', async ({
+    client,
+    assert,
+  }) => {
+    const worker = await createWorker()
+    const court = await createPadelCourt(2000)
+    const customer = await createCustomer()
+    const reservation = await createRecurringReservation(court, customer, { consecutiveGames: 0 })
+    const pastOccurrence = weeksAgoISODate(1)
+
+    const first = await client
+      .patch(`/api/v1/reservations/${reservation.id}/pay-total`)
+      .loginAs(worker)
+      .json({ efectivo: 2000, occurrence_date: pastOccurrence })
+    first.assertStatus(200)
+
+    const repeat = await client
+      .patch(`/api/v1/reservations/${reservation.id}/pay-total`)
+      .loginAs(worker)
+      .json({ efectivo: 2000, occurrence_date: pastOccurrence })
+    repeat.assertStatus(400)
+
+    const otherWeek = await client
+      .patch(`/api/v1/reservations/${reservation.id}/pay-total`)
+      .loginAs(worker)
+      .json({ efectivo: 2000, occurrence_date: weeksAgoISODate(2) })
+    otherWeek.assertStatus(200)
+
+    const payments = await ReservationPayment.query()
+      .where('reservation_id', reservation.id)
+      .where('type', 'total')
+    assert.lengthOf(payments, 2)
+  })
+
+  test('paying a late occurrence advances the streak without rewinding lastIncrementedAt', async ({
+    client,
+    assert,
+  }) => {
+    const worker = await createWorker()
+    const court = await createPadelCourt(2000)
+    const customer = await createCustomer()
+    // Anchor already sits at today's occurrence; paying two weeks back must not move it backwards,
+    // or effectiveConsecutiveGames would re-count hidden dates the streak already consumed.
+    const reservation = await createRecurringReservation(court, customer, {
+      consecutiveGames: 2,
+      lastIncrementedWeeksAgo: 0,
+    })
+    const response = await client
+      .patch(`/api/v1/reservations/${reservation.id}/pay-total`)
+      .loginAs(worker)
+      .json({ efectivo: 2000, occurrence_date: weeksAgoISODate(2) })
+    response.assertStatus(200)
+
+    await reservation.refresh()
+    assert.equal(reservation.consecutiveGames, 3)
+    assert.equal(reservation.lastIncrementedAt!.toISODate(), todayISODate())
+  })
+
+  test('an occurrence_date that is not a real occurrence of the series is rejected', async ({
+    client,
+  }) => {
+    const worker = await createWorker()
+    const court = await createPadelCourt(2000)
+    const customer = await createCustomer()
+    // Series starts 8 weeks ago on today's weekday.
+    const reservation = await createRecurringReservation(court, customer, { consecutiveGames: 0 })
+    await ReservationHiddenDate.create({
+      reservationId: reservation.id,
+      hiddenDate: weeksAgoISODate(1),
+    })
+
+    const wrongWeekday = await client
+      .patch(`/api/v1/reservations/${reservation.id}/pay-total`)
+      .loginAs(worker)
+      .json({ efectivo: 2000, occurrence_date: nowART().plus({ days: 1 }).toISODate() })
+    wrongWeekday.assertStatus(400)
+
+    const beforeSeriesStart = await client
+      .patch(`/api/v1/reservations/${reservation.id}/pay-total`)
+      .loginAs(worker)
+      .json({ efectivo: 2000, occurrence_date: weeksAgoISODate(9) })
+    beforeSeriesStart.assertStatus(400)
+
+    const hidden = await client
+      .patch(`/api/v1/reservations/${reservation.id}/pay-total`)
+      .loginAs(worker)
+      .json({ efectivo: 2000, occurrence_date: weeksAgoISODate(1) })
+    hidden.assertStatus(400)
+
+    const unparseable = await client
+      .patch(`/api/v1/reservations/${reservation.id}/pay-total`)
+      .loginAs(worker)
+      .json({ efectivo: 2000, occurrence_date: 'not-a-date' })
+    unparseable.assertStatus(400)
+  })
+
+  test('a future occurrence can still be paid in advance', async ({ client, assert }) => {
+    const worker = await createWorker()
+    const court = await createPadelCourt(2000)
+    const customer = await createCustomer()
+    const reservation = await createRecurringReservation(court, customer, { consecutiveGames: 0 })
+    const futureOccurrence = weeksAheadISODate(1)
+
+    const response = await client
+      .patch(`/api/v1/reservations/${reservation.id}/pay-total`)
+      .loginAs(worker)
+      .json({ efectivo: 2000, occurrence_date: futureOccurrence })
+    response.assertStatus(200)
+
+    const payment = await ReservationPayment.query()
+      .where('reservation_id', reservation.id)
+      .where('type', 'total')
+      .firstOrFail()
+    assert.equal(payment.occurrenceDate, futureOccurrence)
   })
 })

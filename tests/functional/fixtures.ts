@@ -10,6 +10,7 @@ import { DateTime } from 'luxon'
 import User from '#models/user'
 import Court from '#models/court'
 import CourtPriceRange from '#models/court_price_range'
+import CourtPriceHistory from '#models/court_price_history'
 import Reservation from '#models/reservation'
 import Setting from '#models/setting'
 
@@ -62,6 +63,27 @@ export async function createPadelCourt(pricePerHour = 2000): Promise<Court> {
     price120Min: pricePerHour * 2,
   })
   return court
+}
+
+// Writes one all-day price batch into `court_price_history`, effective from `effectiveFrom`.
+// Call it once per price change so `getHistoricalRanges` has distinct batches to choose from and
+// a test can prove which occurrence date a price was resolved against.
+export async function addCourtPriceHistory(
+  court: Court,
+  pricePerHour: number,
+  effectiveFrom: DateTime
+): Promise<void> {
+  await CourtPriceHistory.create({
+    courtId: court.id,
+    effectiveFrom,
+    startHour: 0,
+    endHour: 24,
+    pricePerHour,
+    isPeakHour: false,
+    price60Min: pricePerHour,
+    price90Min: Math.round(pricePerHour * 1.5),
+    price120Min: pricePerHour * 2,
+  })
 }
 
 // Sets/overwrites the recurring-promo settings rows (upsert, safe inside a rolled-back tx).
