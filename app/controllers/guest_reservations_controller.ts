@@ -2,9 +2,9 @@ import type { HttpContext } from '@adonisjs/core/http'
 import User from '#models/user'
 import Reservation from '#models/reservation'
 import Court from '#models/court'
-import CourtPriceRange from '#models/court_price_range'
 import vine from '@vinejs/vine'
 import { DateTime } from 'luxon'
+import { calculateCourtPrice } from '#services/court_pricing'
 
 const guestReservationValidator = vine.compile(
   vine.object({
@@ -17,29 +17,6 @@ const guestReservationValidator = vine.compile(
     padelCategory: vine.enum(['C1','C2','C3','C4','C5','C6','C7','C8','C9'] as const).optional().nullable(),
   })
 )
-
-const ART_TZ = 'America/Argentina/Buenos_Aires'
-
-function calculatePrice(priceRanges: CourtPriceRange[], defaultPrice: number, start: DateTime, end: DateTime): number {
-  const startART = start.setZone(ART_TZ)
-  const endART = end.setZone(ART_TZ)
-  const startH = startART.hour + startART.minute / 60
-  const endH = (endART.hour === 0 && endART.minute === 0) ? 24 : endART.hour + endART.minute / 60
-  const hours = endH - startH
-
-  if (priceRanges.length === 0) return defaultPrice * hours
-
-  let total = 0
-  for (const range of priceRanges) {
-    const rangeEnd = range.endHour >= 24 ? 24 : range.endHour
-    const overlapStart = Math.max(startH, range.startHour)
-    const overlapEnd = Math.min(endH, rangeEnd)
-    if (overlapEnd > overlapStart) {
-      total += (overlapEnd - overlapStart) * Number(range.pricePerHour)
-    }
-  }
-  return Math.round(total * 100) / 100
-}
 
 export default class GuestReservationsController {
   async store({ request, response }: HttpContext) {
@@ -98,7 +75,7 @@ export default class GuestReservationsController {
       return response.conflict({ message: 'La cancha ya está reservada en ese horario' })
     }
 
-    const totalPrice = calculatePrice(court.priceRanges, Number(court.pricePerHour), start, end)
+    const totalPrice = calculateCourtPrice(court, court.priceRanges, start, end)
 
     const reservation = await Reservation.create({
       courtId,

@@ -1,5 +1,6 @@
 import { test } from '@japa/runner'
 import { DateTime } from 'luxon'
+import { calculateCourtPrice } from '#services/court_pricing'
 
 const ART_TZ = 'America/Argentina/Buenos_Aires'
 
@@ -19,32 +20,19 @@ interface PriceRange {
   pricePerHour: number
 }
 
+// These exercise the real production pricing service — do NOT reimplement it here.
+// A local copy is what let the midnight bugs survive a green suite.
 function calculatePadelPrice(ranges: PriceRange[], defaultPrice: number, start: DateTime, mins: number): number {
-  if (ranges.length === 0) return defaultPrice * (mins / 60)
-  const h = start.setZone(ART_TZ).hour + start.setZone(ART_TZ).minute / 60
-  const range = ranges.find(r => h >= r.startHour && h < r.endHour)
-  if (!range) return defaultPrice * (mins / 60)
-  if (mins === 60  && range.price60Min  != null) return Number(range.price60Min)
-  if (mins === 90  && range.price90Min  != null) return Number(range.price90Min)
-  if (mins === 120 && range.price120Min != null) return Number(range.price120Min)
-  return Math.round(Number(range.pricePerHour) * (mins / 60) * 100) / 100
+  return calculateCourtPrice(
+    { type: 'padel', pricePerHour: defaultPrice },
+    ranges,
+    start,
+    start.plus({ minutes: mins })
+  )
 }
 
 function calculateFootballPrice(ranges: PriceRange[], defaultPrice: number, start: DateTime, end: DateTime): number {
-  const startART = start.setZone(ART_TZ)
-  const endART   = end.setZone(ART_TZ)
-  const startH   = startART.hour + startART.minute / 60
-  const endH     = (endART.hour === 0 && endART.minute === 0) ? 24 : endART.hour + endART.minute / 60
-  const hours    = endH - startH
-  if (ranges.length === 0) return defaultPrice * hours
-  let total = 0
-  for (const r of ranges) {
-    const re = r.endHour >= 24 ? 24 : r.endHour
-    const os = Math.max(startH, r.startHour)
-    const oe = Math.min(endH, re)
-    if (oe > os) total += (oe - os) * Number(r.pricePerHour)
-  }
-  return Math.round(total * 100) / 100
+  return calculateCourtPrice({ type: 'football', pricePerHour: defaultPrice }, ranges, start, end)
 }
 
 function applyDiscount(price: number, pct: number | null): number {
@@ -261,8 +249,24 @@ test.group('Timezone — calculatePadelPrice', () => {
     assert.equal(calculatePadelPrice(padelRanges, 22000, artUTC(2026, 6, 5, 20), 60), 27000)
   })
 
-  test('19:59 ART → still daytime range', ({ assert }) => {
-    assert.equal(calculatePadelPrice(padelRanges, 22000, artUTC(2026, 6, 5, 19, 59), 60), 22000)
+  test('19:59 ART 60min crosses into evening → charges the pricier range', ({ assert }) => {
+    // 19:59-20:59 starts daytime (22000) but finishes in the evening range (27000)
+    assert.equal(calculatePadelPrice(padelRanges, 22000, artUTC(2026, 6, 5, 19, 59), 60), 27000)
+  })
+
+  test('ending exactly on the boundary stays in the starting range', ({ assert }) => {
+    // 19:00-20:00 touches 20:00 but never plays inside the evening range
+    assert.equal(calculatePadelPrice(padelRanges, 22000, artUTC(2026, 6, 5, 19), 60), 22000)
+  })
+
+  test('90min straddling 20:00 → evening price, not daytime', ({ assert }) => {
+    // 19:00-20:30 → max(daytime 33000, evening 40500)
+    assert.equal(calculatePadelPrice(padelRanges, 22000, artUTC(2026, 6, 5, 19), 90), 40500)
+  })
+
+  test('23:00 ART 120min runs past midnight → evening price, never 0', ({ assert }) => {
+    // 23:00-01:00: no range covers 01:00, so the starting range prices the whole booking
+    assert.equal(calculatePadelPrice(padelRanges, 22000, artUTC(2026, 6, 5, 23), 120), 54000)
   })
 })
 
@@ -280,8 +284,27 @@ test.group('Timezone — calculateFootballPrice', () => {
     assert.equal(calculateFootballPrice(footballRanges, 22000, artUTC(2026, 6, 5, 10), artUTC(2026, 6, 5, 12)), 44000)
   })
 
-  test('21:00-23:00 ART → split across ranges: 22000 + 30000 = 52000', ({ assert }) => {
-    assert.equal(calculateFootballPrice(footballRanges, 22000, artUTC(2026, 6, 5, 21), artUTC(2026, 6, 5, 23)), 52000)
+  test('21:00-23:00 ART crosses ranges → pricier rate for the whole booking', ({ assert }) => {
+    // starts at 22000/h, finishes at 30000/h → 30000 × 2h
+    assert.equal(calculateFootballPrice(footballRanges, 22000, artUTC(2026, 6, 5, 21), artUTC(2026, 6, 5, 23)), 60000)
+  })
+
+  test('23:00 + 60min ends exactly at midnight → 30000', ({ assert }) => {
+    assert.equal(calculateFootballPrice(footballRanges, 22000, artUTC(2026, 6, 5, 23), artUTC(2026, 6, 6, 0)), 30000)
+  })
+
+  test('23:00 + 90min runs past midnight → 1.5h × 30000, never 0', ({ assert }) => {
+    assert.equal(calculateFootballPrice(footballRanges, 22000, artUTC(2026, 6, 5, 23), artUTC(2026, 6, 6, 0, 30)), 45000)
+  })
+
+  test('23:00 + 120min runs past midnight → 2h × 30000, never negative', ({ assert }) => {
+    assert.equal(calculateFootballPrice(footballRanges, 22000, artUTC(2026, 6, 5, 23), artUTC(2026, 6, 6, 1)), 60000)
+  })
+
+  test('a configured after-midnight range prices the tail when pricier', ({ assert }) => {
+    const withLateNight = [...footballRanges, { startHour: 0, endHour: 4, pricePerHour: 40000 }]
+    // 23:00-01:00 starts at 30000/h, finishes inside the 40000/h range → 40000 × 2h
+    assert.equal(calculateFootballPrice(withLateNight, 22000, artUTC(2026, 6, 5, 23), artUTC(2026, 6, 6, 1)), 80000)
   })
 })
 

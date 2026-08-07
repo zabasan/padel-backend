@@ -10,6 +10,7 @@ import ProfessorPriceHistory from '#models/professor_price_history'
 import Setting from '#models/setting'
 import User from '#models/user'
 import reservationCalendarCache from '#services/reservation_calendar_cache'
+import { calculateCourtPrice } from '#services/court_pricing'
 import vine from '@vinejs/vine'
 import { DateTime } from 'luxon'
 
@@ -80,51 +81,8 @@ export function filterRecurringByRange<T extends { isRecurring: boolean; startTi
   return rows.filter((r) => !r.isRecurring || weekdays.has(r.startTime.setZone(ART_TZ).weekday))
 }
 
-function calculateFootballPrice(priceRanges: CourtPriceRange[], defaultPrice: number, start: DateTime, end: DateTime): number {
-  const startART = start.setZone(ART_TZ)
-  const endART = end.setZone(ART_TZ)
-  const startH = startART.hour + startART.minute / 60
-  const endH = (endART.hour === 0 && endART.minute === 0) ? 24 : endART.hour + endART.minute / 60
-  const hours = endH - startH
-
-  if (priceRanges.length === 0) return defaultPrice * hours
-
-  let total = 0
-  for (const range of priceRanges) {
-    const rangeEnd = range.endHour >= 24 ? 24 : range.endHour
-    const overlapStart = Math.max(startH, range.startHour)
-    const overlapEnd = Math.min(endH, rangeEnd)
-    if (overlapEnd > overlapStart) {
-      total += (overlapEnd - overlapStart) * Number(range.pricePerHour)
-    }
-  }
-  return Math.round(total * 100) / 100
-}
-
-// Calculate price for padel courts: find range matching start time, use duration-specific price
-function calculatePadelPrice(priceRanges: CourtPriceRange[], defaultPrice: number, start: DateTime, durationMinutes: number): number {
-  if (priceRanges.length === 0) return defaultPrice * (durationMinutes / 60)
-
-  const startART = start.setZone(ART_TZ)
-  const startH = startART.hour + startART.minute / 60
-  const range = priceRanges.find(r => startH >= r.startHour && startH < r.endHour)
-  if (!range) return defaultPrice * (durationMinutes / 60)
-
-  // Use duration-specific price if available
-  if (durationMinutes === 60 && range.price60Min != null) return Number(range.price60Min)
-  if (durationMinutes === 90 && range.price90Min != null) return Number(range.price90Min)
-  if (durationMinutes === 120 && range.price120Min != null) return Number(range.price120Min)
-
-  // Fall back to hourly rate for custom durations or missing duration prices
-  return Math.round(Number(range.pricePerHour) * (durationMinutes / 60) * 100) / 100
-}
-
 function calculatePrice(court: Court, priceRanges: CourtPriceRange[], start: DateTime, end: DateTime): number {
-  const durationMinutes = Math.round(end.diff(start, 'minutes').minutes)
-  if (court.type === 'padel') {
-    return calculatePadelPrice(priceRanges, court.pricePerHour, start, durationMinutes)
-  }
-  return calculateFootballPrice(priceRanges, court.pricePerHour, start, end)
+  return calculateCourtPrice(court, priceRanges, start, end)
 }
 
 function applyDiscount(price: number, discountPct: number): number {
@@ -761,10 +719,7 @@ export default class ReservationsController {
     const startTime = DateTime.fromISO(data.startTime)
     const endTime = startTime.plus({ minutes: data.duration })
 
-    const endTimeART = endTime.setZone(ART_TZ)
-    const endSQL = (endTimeART.hour === 0 && endTimeART.minute === 0)
-      ? endTime.toUTC().endOf('day').toSQL()!
-      : endTime.toUTC().toSQL()!
+    const endSQL = endTime.toUTC().toSQL()!
     const startSQL = startTime.toUTC().toSQL()!
 
     // Validate custom duration for padel (professors only) and football (admin/worker only)
@@ -1008,10 +963,7 @@ export default class ReservationsController {
 
     // Conflict checks (skip for recurring reservations being edited)
     if (!reservation.isRecurring) {
-      const endTimeCART = endTime.setZone(ART_TZ)
-      const endSQLc = (endTimeCART.hour === 0 && endTimeCART.minute === 0)
-        ? endTime.toUTC().endOf('day').toSQL()!
-        : endTime.toUTC().toSQL()!
+      const endSQLc = endTime.toUTC().toSQL()!
       const startSQLc = startTime.toUTC().toSQL()!
 
       const directConflict = await Reservation.query()
