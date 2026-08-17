@@ -4,7 +4,7 @@ import ReservationHiddenDate from '#models/reservation_hidden_date'
 import ReservationPayment from '#models/reservation_payment'
 import {
   addCourtPriceHistory,
-  createWorker,
+  createStaff,
   createCustomer,
   createPadelCourt,
   createRecurringReservation,
@@ -22,14 +22,14 @@ test.group('payTotal — streak advances on total payment', (group) => {
   group.each.setup(() => testUtils.db().withGlobalTransaction())
 
   test('total payment advances consecutiveGames by exactly one', async ({ client, assert }) => {
-    const worker = await createWorker()
+    const staff = await createStaff()
     const court = await createPadelCourt(2000)
     const customer = await createCustomer()
     const reservation = await createRecurringReservation(court, customer, { consecutiveGames: 0 })
 
     const response = await client
       .patch(`/api/v1/reservations/${reservation.id}/pay-total`)
-      .loginAs(worker)
+      .loginAs(staff)
       .json({ efectivo: 2000 })
     response.assertStatus(200)
 
@@ -41,20 +41,20 @@ test.group('payTotal — streak advances on total payment', (group) => {
     client,
     assert,
   }) => {
-    const worker = await createWorker()
+    const staff = await createStaff()
     const court = await createPadelCourt(2000)
     const customer = await createCustomer()
     const reservation = await createRecurringReservation(court, customer, { consecutiveGames: 0 })
 
     const first = await client
       .patch(`/api/v1/reservations/${reservation.id}/pay-total`)
-      .loginAs(worker)
+      .loginAs(staff)
       .json({ efectivo: 2000 })
     first.assertStatus(200)
 
     const second = await client
       .patch(`/api/v1/reservations/${reservation.id}/pay-total`)
-      .loginAs(worker)
+      .loginAs(staff)
       .json({ efectivo: 2000 })
     second.assertStatus(400)
 
@@ -68,7 +68,7 @@ test.group('payTotal — streak advances on total payment', (group) => {
   })
 
   test('deposit-only payment does not advance the streak', async ({ client, assert }) => {
-    const worker = await createWorker()
+    const staff = await createStaff()
     const court = await createPadelCourt(2000)
     const customer = await createCustomer()
     const reservation = await createRecurringReservation(court, customer, {
@@ -78,7 +78,7 @@ test.group('payTotal — streak advances on total payment', (group) => {
 
     const response = await client
       .patch(`/api/v1/reservations/${reservation.id}/pay-deposit`)
-      .loginAs(worker)
+      .loginAs(staff)
       .json({ efectivo: 400 })
     response.assertStatus(200)
 
@@ -91,7 +91,7 @@ test.group('payTotal — streak advances on total payment', (group) => {
     client,
     assert,
   }) => {
-    const worker = await createWorker()
+    const staff = await createStaff()
     const court = await createPadelCourt(2000)
     const customer = await createCustomer()
     await setPromoSettings({ enabled: true, games: 3, freeGames: 1 }) // cycle = 4
@@ -100,7 +100,7 @@ test.group('payTotal — streak advances on total payment', (group) => {
 
     const response = await client
       .patch(`/api/v1/reservations/${reservation.id}/pay-total`)
-      .loginAs(worker)
+      .loginAs(staff)
       .json({ efectivo: 0 })
     response.assertStatus(200)
 
@@ -116,8 +116,11 @@ test.group('payTotal — streak advances on total payment', (group) => {
     assert.equal(Number(payment.expectedAmount), 0)
   })
 
-  test('free occurrence paid at $0 leaves the series carry balance unaffected', async ({ client, assert }) => {
-    const worker = await createWorker()
+  test('free occurrence paid at $0 leaves the series carry balance unaffected', async ({
+    client,
+    assert,
+  }) => {
+    const staff = await createStaff()
     const court = await createPadelCourt(2000)
     const customer = await createCustomer()
     await setPromoSettings({ enabled: true, games: 3, freeGames: 1 })
@@ -125,11 +128,11 @@ test.group('payTotal — streak advances on total payment', (group) => {
 
     const pay = await client
       .patch(`/api/v1/reservations/${reservation.id}/pay-total`)
-      .loginAs(worker)
+      .loginAs(staff)
       .json({ efectivo: 0 })
     pay.assertStatus(200)
 
-    const show = await client.get(`/api/v1/reservations/${reservation.id}`).loginAs(worker)
+    const show = await client.get(`/api/v1/reservations/${reservation.id}`).loginAs(staff)
     show.assertStatus(200)
     assert.equal(Number(show.body().carryBalance), 0)
   })
@@ -145,7 +148,7 @@ test.group('payTotal — charges the requested occurrence', (group) => {
     client,
     assert,
   }) => {
-    const worker = await createWorker()
+    const staff = await createStaff()
     const court = await createPadelCourt(2000)
     const customer = await createCustomer()
     const reservation = await createRecurringReservation(court, customer, { consecutiveGames: 0 })
@@ -153,7 +156,7 @@ test.group('payTotal — charges the requested occurrence', (group) => {
 
     const response = await client
       .patch(`/api/v1/reservations/${reservation.id}/pay-total`)
-      .loginAs(worker)
+      .loginAs(staff)
       .json({ efectivo: 2000, occurrence_date: pastOccurrence })
     response.assertStatus(200)
 
@@ -169,14 +172,14 @@ test.group('payTotal — charges the requested occurrence', (group) => {
     client,
     assert,
   }) => {
-    const worker = await createWorker()
+    const staff = await createStaff()
     const court = await createPadelCourt(2000)
     const customer = await createCustomer()
     const reservation = await createRecurringReservation(court, customer, { consecutiveGames: 0 })
 
     const response = await client
       .patch(`/api/v1/reservations/${reservation.id}/pay-total`)
-      .loginAs(worker)
+      .loginAs(staff)
       .json({ efectivo: 2000 })
     response.assertStatus(200)
 
@@ -191,7 +194,7 @@ test.group('payTotal — charges the requested occurrence', (group) => {
     client,
     assert,
   }) => {
-    const worker = await createWorker()
+    const staff = await createStaff()
     const court = await createPadelCourt(2000)
     const customer = await createCustomer()
     const reservation = await createRecurringReservation(court, customer, { consecutiveGames: 0 })
@@ -202,13 +205,13 @@ test.group('payTotal — charges the requested occurrence', (group) => {
 
     const past = await client
       .patch(`/api/v1/reservations/${reservation.id}/pay-total`)
-      .loginAs(worker)
+      .loginAs(staff)
       .json({ efectivo: 2000, occurrence_date: weeksAgoISODate(1) })
     past.assertStatus(200)
 
     const current = await client
       .patch(`/api/v1/reservations/${reservation.id}/pay-total`)
-      .loginAs(worker)
+      .loginAs(staff)
       .json({ efectivo: 9000, occurrence_date: todayISODate() })
     current.assertStatus(200)
 
@@ -229,7 +232,7 @@ test.group('payTotal — charges the requested occurrence', (group) => {
     client,
     assert,
   }) => {
-    const worker = await createWorker()
+    const staff = await createStaff()
     const court = await createPadelCourt(2000)
     const customer = await createCustomer()
     const reservation = await createRecurringReservation(court, customer, { consecutiveGames: 0 })
@@ -237,19 +240,19 @@ test.group('payTotal — charges the requested occurrence', (group) => {
 
     const first = await client
       .patch(`/api/v1/reservations/${reservation.id}/pay-total`)
-      .loginAs(worker)
+      .loginAs(staff)
       .json({ efectivo: 2000, occurrence_date: pastOccurrence })
     first.assertStatus(200)
 
     const repeat = await client
       .patch(`/api/v1/reservations/${reservation.id}/pay-total`)
-      .loginAs(worker)
+      .loginAs(staff)
       .json({ efectivo: 2000, occurrence_date: pastOccurrence })
     repeat.assertStatus(400)
 
     const otherWeek = await client
       .patch(`/api/v1/reservations/${reservation.id}/pay-total`)
-      .loginAs(worker)
+      .loginAs(staff)
       .json({ efectivo: 2000, occurrence_date: weeksAgoISODate(2) })
     otherWeek.assertStatus(200)
 
@@ -263,7 +266,7 @@ test.group('payTotal — charges the requested occurrence', (group) => {
     client,
     assert,
   }) => {
-    const worker = await createWorker()
+    const staff = await createStaff()
     const court = await createPadelCourt(2000)
     const customer = await createCustomer()
     // Anchor already sits at today's occurrence; paying two weeks back must not move it backwards,
@@ -274,7 +277,7 @@ test.group('payTotal — charges the requested occurrence', (group) => {
     })
     const response = await client
       .patch(`/api/v1/reservations/${reservation.id}/pay-total`)
-      .loginAs(worker)
+      .loginAs(staff)
       .json({ efectivo: 2000, occurrence_date: weeksAgoISODate(2) })
     response.assertStatus(200)
 
@@ -286,7 +289,7 @@ test.group('payTotal — charges the requested occurrence', (group) => {
   test('an occurrence_date that is not a real occurrence of the series is rejected', async ({
     client,
   }) => {
-    const worker = await createWorker()
+    const staff = await createStaff()
     const court = await createPadelCourt(2000)
     const customer = await createCustomer()
     // Series starts 8 weeks ago on today's weekday.
@@ -298,31 +301,31 @@ test.group('payTotal — charges the requested occurrence', (group) => {
 
     const wrongWeekday = await client
       .patch(`/api/v1/reservations/${reservation.id}/pay-total`)
-      .loginAs(worker)
+      .loginAs(staff)
       .json({ efectivo: 2000, occurrence_date: nowART().plus({ days: 1 }).toISODate() })
     wrongWeekday.assertStatus(400)
 
     const beforeSeriesStart = await client
       .patch(`/api/v1/reservations/${reservation.id}/pay-total`)
-      .loginAs(worker)
+      .loginAs(staff)
       .json({ efectivo: 2000, occurrence_date: weeksAgoISODate(9) })
     beforeSeriesStart.assertStatus(400)
 
     const hidden = await client
       .patch(`/api/v1/reservations/${reservation.id}/pay-total`)
-      .loginAs(worker)
+      .loginAs(staff)
       .json({ efectivo: 2000, occurrence_date: weeksAgoISODate(1) })
     hidden.assertStatus(400)
 
     const unparseable = await client
       .patch(`/api/v1/reservations/${reservation.id}/pay-total`)
-      .loginAs(worker)
+      .loginAs(staff)
       .json({ efectivo: 2000, occurrence_date: 'not-a-date' })
     unparseable.assertStatus(400)
   })
 
   test('a future occurrence can still be paid in advance', async ({ client, assert }) => {
-    const worker = await createWorker()
+    const staff = await createStaff()
     const court = await createPadelCourt(2000)
     const customer = await createCustomer()
     const reservation = await createRecurringReservation(court, customer, { consecutiveGames: 0 })
@@ -330,7 +333,7 @@ test.group('payTotal — charges the requested occurrence', (group) => {
 
     const response = await client
       .patch(`/api/v1/reservations/${reservation.id}/pay-total`)
-      .loginAs(worker)
+      .loginAs(staff)
       .json({ efectivo: 2000, occurrence_date: futureOccurrence })
     response.assertStatus(200)
 

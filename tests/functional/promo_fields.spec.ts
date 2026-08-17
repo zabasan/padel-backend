@@ -1,7 +1,7 @@
 import { test } from '@japa/runner'
 import testUtils from '@adonisjs/core/services/test_utils'
 import {
-  createWorker,
+  createStaff,
   createCustomer,
   createPadelCourt,
   createRecurringReservation,
@@ -24,13 +24,13 @@ test.group('promo fields parity — index and show both return isFreeGame', (gro
     client,
     assert,
   }) => {
-    const worker = await createWorker()
+    const staff = await createStaff()
     const court = await createPadelCourt(2000)
     const customer = await createCustomer()
     await setPromoSettings({ enabled: true, games: 3, freeGames: 1 }) // cycle = 4
     const reservation = await createRecurringReservation(court, customer, { consecutiveGames: 3 })
 
-    const response = await client.get('/api/v1/reservations').loginAs(worker)
+    const response = await client.get('/api/v1/reservations').loginAs(staff)
     response.assertStatus(200)
 
     const body = response.body() as any[]
@@ -44,13 +44,13 @@ test.group('promo fields parity — index and show both return isFreeGame', (gro
     client,
     assert,
   }) => {
-    const worker = await createWorker()
+    const staff = await createStaff()
     const court = await createPadelCourt(2000)
     const customer = await createCustomer()
     await setPromoSettings({ enabled: true, games: 3, freeGames: 1 })
     const reservation = await createRecurringReservation(court, customer, { consecutiveGames: 3 })
 
-    const response = await client.get(`/api/v1/reservations/${reservation.id}`).loginAs(worker)
+    const response = await client.get(`/api/v1/reservations/${reservation.id}`).loginAs(staff)
     response.assertStatus(200)
 
     const body = response.body() as any
@@ -62,19 +62,19 @@ test.group('promo fields parity — index and show both return isFreeGame', (gro
     client,
     assert,
   }) => {
-    const worker = await createWorker()
+    const staff = await createStaff()
     const court = await createPadelCourt(2000)
     const customer = await createCustomer()
     await setPromoSettings({ enabled: true, games: 3, freeGames: 1 })
     const reservation = await createRecurringReservation(court, customer, { consecutiveGames: 0 })
 
-    const index = await client.get('/api/v1/reservations').loginAs(worker)
+    const index = await client.get('/api/v1/reservations').loginAs(staff)
     index.assertStatus(200)
     const row = (index.body() as any[]).find((r) => r.id === reservation.id)
     assert.isFalse(row.isFreeGame)
     assert.isAbove(Number(row.occurrencePrice), 0)
 
-    const show = await client.get(`/api/v1/reservations/${reservation.id}`).loginAs(worker)
+    const show = await client.get(`/api/v1/reservations/${reservation.id}`).loginAs(staff)
     show.assertStatus(200)
     assert.isFalse((show.body() as any).isFreeGame)
   })

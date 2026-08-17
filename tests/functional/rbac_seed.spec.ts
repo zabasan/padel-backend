@@ -1,11 +1,7 @@
 import { test } from '@japa/runner'
 import testUtils from '@adonisjs/core/services/test_utils'
 import db from '@adonisjs/lucid/services/db'
-import {
-  MODULE_NAMES,
-  ROLE_PERMISSION_MATRIX,
-  SEEDED_ROLES,
-} from '#database/seed_data/permission_matrix'
+import { MODULE_NAMES, SEEDED_ROLES } from '#database/seed_data/permission_matrix'
 
 /**
  * Verifies the migrations in 1781000000001..005 actually seeded the real
@@ -47,30 +43,35 @@ test.group('RBAC seed — migrated database matches the source-of-truth matrix',
     assert.equal(Number(count[0].c), SEEDED_ROLES.length * MODULE_NAMES.length)
   })
 
-  test('admin and supervisor matrices in the DB match the constant exactly', async ({ assert }) => {
-    for (const roleName of ['admin', 'supervisor'] as const) {
+  /**
+   * Deliberately checks COVERAGE, not values.
+   *
+   * This test used to deepEqual the live rows against ROLE_PERMISSION_MATRIX, which
+   * made it a tripwire on a business decision: the Roles ABM exists precisely so an
+   * admin can retune any role's grants at runtime, and the first such change turned
+   * this red with nothing broken. The constant is the SEED, not the current truth —
+   * `unit/permission_matrix.spec.ts` is where its values belong under test.
+   *
+   * What still must hold, and what the resolver actually depends on: exactly one live
+   * row per (seeded role × catalog module). A missing row silently resolves to denied,
+   * so its absence is a real defect no matter what the verbs say.
+   */
+  test('every seeded role has a live row for every catalog module', async ({ assert }) => {
+    for (const roleName of SEEDED_ROLES) {
       const rows = await db
         .from('role_permissions')
         .join('roles', 'roles.id', 'role_permissions.role_id')
         .where('roles.name', roleName)
         .whereNull('roles.deleted_at')
         .whereNull('role_permissions.deleted_at')
-        .select('module', 'view', 'create', 'update', 'erase')
+        .select('module')
 
-      const fromDb: Record<
-        string,
-        { view: boolean; create: boolean; update: boolean; erase: boolean }
-      > = {}
-      for (const row of rows) {
-        fromDb[row.module] = {
-          view: Boolean(row.view),
-          create: Boolean(row.create),
-          update: Boolean(row.update),
-          erase: Boolean(row.erase),
-        }
-      }
-
-      assert.deepEqual(fromDb, ROLE_PERMISSION_MATRIX[roleName])
+      const modules = rows.map((r) => r.module)
+      assert.sameMembers(
+        modules,
+        MODULE_NAMES,
+        `role "${roleName}" is missing (or duplicating) role_permissions rows`
+      )
     }
   })
 

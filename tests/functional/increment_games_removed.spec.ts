@@ -1,6 +1,11 @@
 import { test } from '@japa/runner'
 import testUtils from '@adonisjs/core/services/test_utils'
-import { createWorker, createCustomer, createPadelCourt, createRecurringReservation } from './fixtures.js'
+import {
+  createStaff,
+  createCustomer,
+  createPadelCourt,
+  createRecurringReservation,
+} from './fixtures.js'
 
 // The manual "Jugó" action and its silent auto-increment counterpart are removed entirely —
 // the streak is now payment-driven only (spec: "Removed action has no effect").
@@ -11,14 +16,14 @@ test.group('increment-games route removed', (group) => {
     client,
     assert,
   }) => {
-    const worker = await createWorker()
+    const staff = await createStaff()
     const court = await createPadelCourt()
     const customer = await createCustomer()
     const reservation = await createRecurringReservation(court, customer, { consecutiveGames: 2 })
 
     const response = await client
       .patch(`/api/v1/reservations/${reservation.id}/increment-games`)
-      .loginAs(worker)
+      .loginAs(staff)
       .json({})
     response.assertStatus(404)
 

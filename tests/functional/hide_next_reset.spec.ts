@@ -2,7 +2,7 @@ import { test } from '@japa/runner'
 import testUtils from '@adonisjs/core/services/test_utils'
 import ReservationHiddenDate from '#models/reservation_hidden_date'
 import {
-  createWorker,
+  createStaff,
   createCustomer,
   createPadelCourt,
   createRecurringReservation,
@@ -16,15 +16,18 @@ import {
 test.group('hideNext — reset only on next-due hide', (group) => {
   group.each.setup(() => testUtils.db().withGlobalTransaction())
 
-  test('hiding the immediate next-due occurrence resets consecutiveGames to 0', async ({ client, assert }) => {
-    const worker = await createWorker()
+  test('hiding the immediate next-due occurrence resets consecutiveGames to 0', async ({
+    client,
+    assert,
+  }) => {
+    const staff = await createStaff()
     const court = await createPadelCourt()
     const customer = await createCustomer()
     const reservation = await createRecurringReservation(court, customer, { consecutiveGames: 5 })
 
     const response = await client
       .patch(`/api/v1/reservations/${reservation.id}/hide-next`)
-      .loginAs(worker)
+      .loginAs(staff)
       .json({ date: todayISODate() })
     response.assertStatus(200)
 
@@ -33,8 +36,11 @@ test.group('hideNext — reset only on next-due hide', (group) => {
     assert.isNull(reservation.lastIncrementedAt)
   })
 
-  test('hiding a farther-future occurrence does not reset consecutiveGames', async ({ client, assert }) => {
-    const worker = await createWorker()
+  test('hiding a farther-future occurrence does not reset consecutiveGames', async ({
+    client,
+    assert,
+  }) => {
+    const staff = await createStaff()
     const court = await createPadelCourt()
     const customer = await createCustomer()
     const reservation = await createRecurringReservation(court, customer, { consecutiveGames: 5 })
@@ -42,7 +48,7 @@ test.group('hideNext — reset only on next-due hide', (group) => {
     // 3 weeks out — nowhere near the immediate next-due occurrence (today).
     const response = await client
       .patch(`/api/v1/reservations/${reservation.id}/hide-next`)
-      .loginAs(worker)
+      .loginAs(staff)
       .json({ date: weeksAheadISODate(3) })
     response.assertStatus(200)
 
@@ -54,7 +60,7 @@ test.group('hideNext — reset only on next-due hide', (group) => {
     client,
     assert,
   }) => {
-    const worker = await createWorker()
+    const staff = await createStaff()
     const court = await createPadelCourt()
     const customer = await createCustomer()
     const reservation = await createRecurringReservation(court, customer, { consecutiveGames: 5 })
@@ -62,11 +68,14 @@ test.group('hideNext — reset only on next-due hide', (group) => {
     // Today's occurrence is ALREADY hidden (pre-existing), so the true next-due occurrence
     // is next week, not today. Without hidden-date-awareness, naive "next occurrence" logic
     // would still report today, and hiding next week would incorrectly NOT reset.
-    await ReservationHiddenDate.create({ reservationId: reservation.id, hiddenDate: todayISODate() })
+    await ReservationHiddenDate.create({
+      reservationId: reservation.id,
+      hiddenDate: todayISODate(),
+    })
 
     const response = await client
       .patch(`/api/v1/reservations/${reservation.id}/hide-next`)
-      .loginAs(worker)
+      .loginAs(staff)
       .json({ date: weeksAheadISODate(1) })
     response.assertStatus(200)
 

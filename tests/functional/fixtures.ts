@@ -12,8 +12,10 @@ import Court from '#models/court'
 import CourtPriceRange from '#models/court_price_range'
 import CourtPriceHistory from '#models/court_price_history'
 import Reservation from '#models/reservation'
+import Role from '#models/role'
 import Setting from '#models/setting'
 import Product from '#models/product'
+import { setRolePermission, setUserPermission, type ModulePermissions } from '#services/permissions'
 
 const ART_TZ = 'America/Argentina/Buenos_Aires'
 
@@ -73,6 +75,114 @@ export async function createCustomer(): Promise<User> {
     password: await hash.make('fixturepass123'),
     role: 'customer',
   })
+}
+
+/**
+ * A user holding EXACTLY the grants asked for and nothing else — the base for
+ * every permission-gate test.
+ *
+ * Why not `createCustomer()` as the baseline: `customer` already holds
+ * `courts.view` and `reservations.vcue` in the seeded matrix, so it is not a
+ * clean zero on those modules. And `setUserPermission` is additive by design
+ * (OR-merge, D3) — a false extra CANNOT revoke a role grant — so the only way
+ * to express "does not hold X" is a base that genuinely lacks it.
+ *
+ * The bare custom role has no `role_permissions` rows at all, which resolves to
+ * all-false for every catalog module (mergePermissionRows seeds the catalog
+ * denied, then OR-s grants in). Role.create fires the afterSave hook that
+ * invalidates the role cache, so User's syncRoleWithRoleId resolves the brand
+ * new name on the very next save.
+ *
+ * Tests written against this are immune to permission changes made through the
+ * Roles ABM — which is the whole point: who holds what is a business decision,
+ * while "this route is gated on this {module, action}" is the code contract.
+ */
+/**
+ * A role with no `role_permissions` rows — grants nothing on any module.
+ *
+ * Useful on its own as the role to ASSIGN in a users_controller test: D7
+ * (assertRoleAssignable) refuses to let an actor hand out a role holding
+ * permissions the actor lacks, and the empty set is a subset of every set. Any
+ * seeded role name would drag that rule into a test that is not about it — the
+ * default `customer` holds courts.view + reservations.vcue, so it is NOT freely
+ * assignable.
+ */
+export async function createBareRole(): Promise<Role> {
+  return Role.create({
+    name: unique('fixture-role').slice(0, 50),
+    description: 'Bare role for permission-gate tests — no role_permissions rows.',
+  })
+}
+
+const fill = (perms: Partial<ModulePermissions>): ModulePermissions => ({
+  view: perms.view ?? false,
+  create: perms.create ?? false,
+  update: perms.update ?? false,
+  erase: perms.erase ?? false,
+})
+
+/**
+ * A custom role holding exactly `grants` at the ROLE level.
+ *
+ * Use this (over a seeded role name) whenever a test needs a known role grid —
+ * the three-layer roleGrid/userGrid/effective model, or D7's subset comparison.
+ * Pinning those to `worker`'s or `admin`'s seeded grid makes them fail the moment
+ * someone retunes that role in the ABM, which is a supported action.
+ */
+export async function createRoleWithPermissions(
+  grants: Record<string, Partial<ModulePermissions>> = {}
+): Promise<Role> {
+  const role = await createBareRole()
+  for (const [module, perms] of Object.entries(grants)) {
+    await setRolePermission(role.id, module, fill(perms))
+  }
+  return role
+}
+
+/**
+ * A staff actor for tests whose SUBJECT is business logic — pricing, streaks, promos,
+ * the stock ledger — and which merely need somebody authorised to drive the endpoints.
+ *
+ * Use this instead of `createWorker()` in those tests. Reaching for a seeded role there
+ * looks harmless but silently binds the test to that role's current grants: revoking one
+ * of worker's permissions through the Roles ABM (a supported action) took 20 unrelated
+ * business-logic tests down with it, none of which was asserting anything about roles.
+ *
+ * The grants are broad ON PURPOSE — this actor is scaffolding, not the thing under test.
+ * When the permission boundary IS the subject, use `createUserWithPermissions` with the
+ * narrow set you mean to prove.
+ */
+export function createStaff(): Promise<User> {
+  const all = { view: true, create: true, update: true, erase: true }
+  return createUserWithPermissions({
+    reservations: all,
+    reservation_management: all,
+    payments: all,
+    products: all,
+    sales: all,
+    users: all,
+  })
+}
+
+export async function createUserWithPermissions(
+  grants: Record<string, Partial<ModulePermissions>> = {},
+  opts: { role?: Role } = {}
+): Promise<User> {
+  const role = opts.role ?? (await createBareRole())
+
+  const user = await User.create({
+    fullName: 'Fixture Granted User',
+    email: `${unique('fixture-granted')}@example.test`,
+    phone: unique('phone').slice(0, 15),
+    password: await hash.make('fixturepass123'),
+    roleId: role.id,
+  })
+
+  for (const [module, perms] of Object.entries(grants)) {
+    await setUserPermission(user.id, module, fill(perms))
+  }
+
+  return user
 }
 
 // Padel court with a single all-day price range so calcRecurringOccurrencePrice has a

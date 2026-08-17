@@ -6,8 +6,12 @@ import {
   resolvePermissionsForUser,
   RoleAssignmentDeniedError,
 } from '#services/permissions'
-import { findRoleIdByName } from '#services/role_sync'
-import { createAdmin, createSupervisor, createWorker } from './fixtures.js'
+import {
+  createAdmin,
+  createRoleWithPermissions,
+  createSupervisor,
+  createUserWithPermissions,
+} from './fixtures.js'
 
 /**
  * D7 — the one validation on assigning a role, and the only thing that
@@ -18,20 +22,27 @@ import { createAdmin, createSupervisor, createWorker } from './fixtures.js'
  * phone number (first non-customer login is phone-only), which the
  * supervisor chose and therefore knows.
  *
- * IMPORTANT scoping note: `start/routes.ts` still gates `POST/PUT /users`
- * with the OLD `role_middleware({ roles: ['admin', 'worker'] })` — Phase 1
- * deliberately leaves it untouched (rollout is group-by-group, later). That
- * gate has no idea `supervisor` exists, so a supervisor gets 403'd at the
- * ROUTE layer before ever reaching `assertRoleAssignable`. The two HTTP
- * tests below are still valid end-to-end regressions (a supervisor must
- * never be able to self-promote, full stop, for whatever combination of
- * reasons denies it) — but they do not yet prove D7 *specifically* fired.
- * D7 is proven directly, against the real DB, in the third test.
+ * The two HTTP tests keep naming `supervisor` and `admin` deliberately: they
+ * encode the concrete scenario the security audit turned up, and it is worth
+ * reading as that scenario rather than as an abstract subset comparison. They
+ * are also the one place a seeded role name is safe here — the only ABM change
+ * that could flip them is granting supervisor everything admin holds, at which
+ * point "supervisor cannot become admin" is vacuous rather than wrong.
+ *
+ * D7's actual rule (a subset comparison) is proven on purpose-built roles in
+ * the third test, so retuning any seeded role cannot mask a regression in it.
+ *
+ * Note for future readers: an earlier version of this comment said these routes
+ * were still gated by `role_middleware({ roles: [...] })`, so a supervisor was
+ * bounced at the route layer before reaching `assertRoleAssignable`. That is no
+ * longer true — the RBAC rollout finished and `routes.ts` carries no
+ * `middleware.role` at all (it stays registered in kernel.ts but gates nothing).
+ * These two tests therefore DO prove D7 fired: nothing else denies them.
  */
 test.group('role assignment guard (D7)', (group) => {
   group.each.setup(() => testUtils.db().withGlobalTransaction())
 
-  test('supervisor cannot promote themselves to admin via PUT /users/:id (blocked today by route_middleware; D7 will also apply once this route migrates)', async ({
+  test('supervisor cannot promote themselves to admin via PUT /users/:id', async ({
     client,
     assert,
   }) => {
@@ -47,7 +58,7 @@ test.group('role assignment guard (D7)', (group) => {
     assert.equal(supervisor.role, 'supervisor')
   })
 
-  test('supervisor cannot create a new admin account via POST /users (same route_middleware caveat as above)', async ({
+  test('supervisor cannot create a new admin account via POST /users', async ({
     client,
     assert,
   }) => {
@@ -65,19 +76,36 @@ test.group('role assignment guard (D7)', (group) => {
     assert.isNull(created)
   })
 
-  test('D7 directly: supervisor may be assigned worker (subset) but not admin (superset)', async ({
-    assert,
-  }) => {
-    const supervisor = await createSupervisor()
-    const adminRoleId = await findRoleIdByName('admin')
-    const workerRoleId = await findRoleIdByName('worker')
-    const supervisorPerms = await resolvePermissionsForUser(supervisor)
+  /**
+   * D7 in isolation, on purpose-built roles rather than seeded ones.
+   *
+   * Framed as "supervisor may be assigned worker but not admin", this read as a test of
+   * D7 but actually asserted the seeded roles' relative ordering — a business decision.
+   * Granting worker more through the Roles ABM inverted that ordering and turned this
+   * red while D7 itself was working perfectly. The rule is a subset comparison, so the
+   * inputs are now two roles built to be a subset and a superset of the actor.
+   */
+  test('D7 directly: a subset role is assignable, a superset role is not', async ({ assert }) => {
+    const actorRole = await createRoleWithPermissions({
+      users: { view: true, create: true, update: true },
+      stats: { view: true },
+    })
+    const actor = await createUserWithPermissions({}, { role: actorRole })
 
-    await assertCanAssignRole(supervisorPerms, workerRoleId!) // must not throw
+    const subsetRole = await createRoleWithPermissions({ users: { view: true } })
+    const supersetRole = await createRoleWithPermissions({
+      users: { view: true, create: true, update: true, erase: true },
+      stats: { view: true },
+      settings: { view: true, update: true },
+    })
+
+    const actorPerms = await resolvePermissionsForUser(actor)
+
+    await assertCanAssignRole(actorPerms, subsetRole.id) // must not throw
 
     let deniedError: unknown = null
     try {
-      await assertCanAssignRole(supervisorPerms, adminRoleId!)
+      await assertCanAssignRole(actorPerms, supersetRole.id)
     } catch (error) {
       deniedError = error
     }
@@ -100,16 +128,21 @@ test.group('role assignment guard (D7)', (group) => {
     assert.equal(admin.role, 'admin')
   })
 
-  test('worker (route-reachable, admin+worker group) can assign a subset role to another user', async ({
+  // End-to-end over HTTP, without going through admin: someone holding `users.update`
+  // can assign a role they already cover. The actor and the role assigned share one
+  // grid, so it is a subset of itself — the boundary D7 allows.
+  test('a users.update holder can assign a role it already covers, over HTTP', async ({
     client,
   }) => {
-    const worker1 = await createWorker()
-    const worker2 = await createWorker()
+    const grants = { users: { view: true, update: true } }
+    const assignableRole = await createRoleWithPermissions(grants)
+    const actor = await createUserWithPermissions({}, { role: assignableRole })
+    const target = await createUserWithPermissions({}, { role: assignableRole })
 
     const response = await client
-      .put(`/api/v1/users/${worker2.id}`)
-      .loginAs(worker1)
-      .json({ role: 'worker' })
+      .put(`/api/v1/users/${target.id}`)
+      .loginAs(actor)
+      .json({ role: assignableRole.name })
 
     response.assertStatus(200)
   })

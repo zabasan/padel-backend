@@ -1,6 +1,6 @@
 import { test } from '@japa/runner'
 import testUtils from '@adonisjs/core/services/test_utils'
-import { createAdmin, createWorker } from './fixtures.js'
+import { createAdmin, createUserWithPermissions } from './fixtures.js'
 import { findRoleIdByName } from '#services/role_sync'
 import { MODULE_NAMES } from '#database/seed_data/permission_matrix'
 import type { PermissionMap } from '#services/permissions'
@@ -94,43 +94,46 @@ test.group('roles CRUD (admin)', (group) => {
    * necesita para llenar los <select> de Rol. Sin esto, dar de alta un usuario sin `roles.view`
    * dejaría el desplegable vacío. Leer NO implica poder escribir.
    */
-  test('a worker reaches GET /roles through users.view, without holding roles.view', async ({
+  test('users.view alone reaches GET /roles, without holding roles.view', async ({
     client,
     assert,
   }) => {
-    const worker = await createWorker()
-    const response = await client.get('/api/v1/roles').loginAs(worker)
+    const userManager = await createUserWithPermissions({ users: { view: true } })
+    const response = await client.get('/api/v1/roles').loginAs(userManager)
     response.assertStatus(200)
     assert.isAbove((response.body() as any[]).length, 0)
   })
 
-  test('that same worker still cannot write anything in the roles ABM', async ({ client }) => {
-    const worker = await createWorker()
+  test('users.view does NOT let you write anything in the roles ABM', async ({ client }) => {
+    const userManager = await createUserWithPermissions({ users: { view: true } })
     const adminRoleId = await findRoleIdByName('admin')
 
     await client
       .post('/api/v1/roles')
-      .loginAs(worker)
+      .loginAs(userManager)
       .json({ name: 'inventado', grid: {} })
       .then((r) => r.assertStatus(403))
 
     await client
       .put(`/api/v1/roles/${adminRoleId}`)
-      .loginAs(worker)
+      .loginAs(userManager)
       .json({ description: 'no' })
       .then((r) => r.assertStatus(403))
 
     await client
       .delete(`/api/v1/roles/${adminRoleId}`)
-      .loginAs(worker)
+      .loginAs(userManager)
       .then((r) => r.assertStatus(403))
   })
 
-  test('the modules catalog stays out of a worker reach — it has no user_permissions.view', async ({
+  // The modules catalog feeds the per-user permissions screen, so it is gated on
+  // `user_permissions.view` — deliberately a different module from `users`, so
+  // "manage users" can be granted without "edit anyone's permissions".
+  test('the modules catalog needs user_permissions.view — users.view is not enough', async ({
     client,
   }) => {
-    const worker = await createWorker()
-    const response = await client.get('/api/v1/modules').loginAs(worker)
+    const userManager = await createUserWithPermissions({ users: { view: true } })
+    const response = await client.get('/api/v1/modules').loginAs(userManager)
     response.assertStatus(403)
   })
 
@@ -165,9 +168,9 @@ test.group('roles CRUD (admin)', (group) => {
       .json({ name: 'Kiosco', grid: fullGrid(['courts']) })
     const roleId = (create.body() as any).id
 
-    const worker = await createWorker()
+    const member = await createUserWithPermissions()
     const assign = await client
-      .put(`/api/v1/users/${worker.id}`)
+      .put(`/api/v1/users/${member.id}`)
       .loginAs(admin)
       .json({ role: 'Kiosco' })
     assign.assertStatus(200)

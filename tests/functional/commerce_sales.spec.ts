@@ -2,7 +2,7 @@ import { test } from '@japa/runner'
 import testUtils from '@adonisjs/core/services/test_utils'
 import db from '@adonisjs/lucid/services/db'
 import Product from '#models/product'
-import { createAdmin, createProduct, createWorker } from './fixtures.js'
+import { createAdmin, createProduct, createStaff } from './fixtures.js'
 
 /**
  * Behavior of the POS: what a sale does to stock, what it refuses to do, and
@@ -367,13 +367,13 @@ test.group('products — soft delete', (group) => {
     client,
     assert,
   }) => {
-    const worker = await createWorker()
+    const staff = await createStaff()
     const admin = await createAdmin()
     const product = await createProduct({ name: 'Fixture Doomed', price: 500, stock: 5 })
 
     const sale = await client
       .post('/api/v1/sales')
-      .loginAs(worker)
+      .loginAs(staff)
       .json({ items: [{ productId: product.id, quantity: 1 }], efectivo: 500 })
     sale.assertStatus(201)
 

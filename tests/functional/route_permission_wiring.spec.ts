@@ -1,47 +1,53 @@
 import { test } from '@japa/runner'
 import testUtils from '@adonisjs/core/services/test_utils'
-import { setUserPermission } from '#services/permissions'
 import {
-  createAdmin,
-  createCustomer,
+  createBareRole,
   createPadelCourt,
   createRecurringReservation,
-  createWorker,
+  createUserWithPermissions,
   todayISODate,
 } from './fixtures.js'
 
 /**
  * `permission_matrix.spec.ts` proves the GRANTS are right. This proves the WIRING is right —
- * that the right route actually carries `middleware.permission({module, action})` — which is the
- * only thing Step 3 (routes.ts annotation) can get wrong. Built up module by module, in the same
- * order as the rollout, so a wiring mistake is caught at its module, not at the end.
+ * that the right route actually carries `middleware.permission({module, action})`. Built up
+ * module by module so a wiring mistake is caught at its module, not at the end.
  *
- * `role_middleware` stays on every route below during this rollout (AND semantics) — these tests
- * use `customer`/`worker`, neither of which passes the OLD gate on admin-only routes either, so a
- * 403 here does not yet prove `permission_middleware` fired on its own. That end-to-end proof
- * lands once each group's `role` wrapper is removed (plan §9-STEP-3, "once a group is fully
- * covered"). What these tests DO prove now: the annotation exists, is spelled correctly, and
- * matches the seeded matrix — a typo'd module name or action would 403 here today already,
- * because `customer`/`worker` hold nothing on these modules regardless of which gate fires.
+ * EVERY test here asserts on a PERMISSION, never on a role name. Which role holds which verb
+ * is a business decision the Roles ABM can change at any time; that a given route is gated on
+ * a given {module, action} is a code contract. Tying these tests to role names conflated the
+ * two, and an admin tightening `worker` through the app turned the suite red with nothing
+ * broken. `createUserWithPermissions()` builds a user on a bare role holding exactly the
+ * grants under test — see the note on that fixture for why a customer is not a valid baseline.
+ *
+ * Each gate is proven in both directions: a user granted the verb gets PAST the gate, and a
+ * user holding the module's other verbs (or nothing) gets 403. The negative direction is what
+ * catches a missing annotation; the positive one is what catches a typo'd module name, which
+ * would otherwise 403 everybody and look like a correctly locked route.
+ *
+ * Statuses beyond the gate are other files' business: assert 403 or `notEqual(403)`, not a
+ * specific success code, unless the success path is trivially deterministic.
  */
 test.group('route permission wiring — settings', (group) => {
   group.each.setup(() => testUtils.db().withGlobalTransaction())
 
-  test('customer cannot PUT /settings', async ({ client }) => {
-    const customer = await createCustomer()
-    const response = await client.put('/api/v1/settings').loginAs(customer).json({})
+  test('a user holding no settings permission cannot PUT /settings', async ({ client }) => {
+    const user = await createUserWithPermissions()
+    const response = await client.put('/api/v1/settings').loginAs(user).json({})
     response.assertStatus(403)
   })
 
-  test('worker cannot PUT /settings (holds no settings permission)', async ({ client }) => {
-    const worker = await createWorker()
-    const response = await client.put('/api/v1/settings').loginAs(worker).json({})
+  // settings is a view/update module — proves the gate reads `update`, not just
+  // "has some settings permission".
+  test('settings.view alone does NOT open PUT /settings', async ({ client }) => {
+    const viewer = await createUserWithPermissions({ settings: { view: true } })
+    const response = await client.put('/api/v1/settings').loginAs(viewer).json({})
     response.assertStatus(403)
   })
 
-  test('admin can PUT /settings', async ({ client }) => {
-    const admin = await createAdmin()
-    const response = await client.put('/api/v1/settings').loginAs(admin).json({})
+  test('a user granted settings.update can PUT /settings', async ({ client }) => {
+    const editor = await createUserWithPermissions({ settings: { view: true, update: true } })
+    const response = await client.put('/api/v1/settings').loginAs(editor).json({})
     response.assertStatus(200)
   })
 })
@@ -49,21 +55,15 @@ test.group('route permission wiring — settings', (group) => {
 test.group('route permission wiring — stats', (group) => {
   group.each.setup(() => testUtils.db().withGlobalTransaction())
 
-  test('customer cannot GET /stats', async ({ client }) => {
-    const customer = await createCustomer()
-    const response = await client.get('/api/v1/stats').loginAs(customer)
+  test('a user holding no stats permission cannot GET /stats', async ({ client }) => {
+    const user = await createUserWithPermissions()
+    const response = await client.get('/api/v1/stats').loginAs(user)
     response.assertStatus(403)
   })
 
-  test('worker cannot GET /stats (holds no stats permission)', async ({ client }) => {
-    const worker = await createWorker()
-    const response = await client.get('/api/v1/stats').loginAs(worker)
-    response.assertStatus(403)
-  })
-
-  test('admin can GET /stats', async ({ client }) => {
-    const admin = await createAdmin()
-    const response = await client.get('/api/v1/stats').loginAs(admin)
+  test('a user granted stats.view can GET /stats', async ({ client }) => {
+    const viewer = await createUserWithPermissions({ stats: { view: true } })
+    const response = await client.get('/api/v1/stats').loginAs(viewer)
     response.assertStatus(200)
   })
 })
@@ -71,79 +71,115 @@ test.group('route permission wiring — stats', (group) => {
 test.group('route permission wiring — audit', (group) => {
   group.each.setup(() => testUtils.db().withGlobalTransaction())
 
-  test('customer cannot GET /audit/users', async ({ client }) => {
-    const customer = await createCustomer()
-    const response = await client.get('/api/v1/audit/users').loginAs(customer)
+  test('a user holding no audit permission cannot GET /audit/users', async ({ client }) => {
+    const user = await createUserWithPermissions()
+    const response = await client.get('/api/v1/audit/users').loginAs(user)
     response.assertStatus(403)
   })
 
-  test('worker cannot GET /audit/users (holds no audit permission)', async ({ client }) => {
-    const worker = await createWorker()
-    const response = await client.get('/api/v1/audit/users').loginAs(worker)
-    response.assertStatus(403)
-  })
+  // All three audit endpoints share one `audit.view` gate — worth covering
+  // together, since a typo on any single annotation would only show up here.
+  test('a user granted audit.view reaches all three audit endpoints', async ({ client }) => {
+    const auditor = await createUserWithPermissions({ audit: { view: true } })
 
-  test('admin can GET /audit/users', async ({ client }) => {
-    const admin = await createAdmin()
-    const response = await client.get('/api/v1/audit/users').loginAs(admin)
-    response.assertStatus(200)
+    const users = await client.get('/api/v1/audit/users').loginAs(auditor)
+    users.assertStatus(200)
+
+    const reservations = await client.get('/api/v1/audit/reservations').loginAs(auditor)
+    reservations.assertStatus(200)
+
+    const commerce = await client.get('/api/v1/audit/commerce').loginAs(auditor)
+    commerce.assertStatus(200)
   })
 })
 
 test.group('route permission wiring — users', (group) => {
   group.each.setup(() => testUtils.db().withGlobalTransaction())
 
-  test('customer is denied on every users route', async ({ client }) => {
-    const customer = await createCustomer()
-    const target = await createCustomer()
+  test('a user holding no users permission is denied on every users route', async ({ client }) => {
+    const nobody = await createUserWithPermissions()
+    const target = await createUserWithPermissions()
 
     const responses = await Promise.all([
-      client.post('/api/v1/users').loginAs(customer).json({ fullName: 'X', phone: '5599999001' }),
-      client.get('/api/v1/users').loginAs(customer),
-      client.get('/api/v1/users/search?q=abc').loginAs(customer),
-      client.get(`/api/v1/users/${target.id}`).loginAs(customer),
-      client.put(`/api/v1/users/${target.id}`).loginAs(customer).json({ fullName: 'Y' }),
-      client.post(`/api/v1/users/${target.id}/reset-login`).loginAs(customer),
-      client.patch(`/api/v1/users/${target.id}/toggle-status`).loginAs(customer),
-      client.delete(`/api/v1/users/${target.id}`).loginAs(customer),
+      client.post('/api/v1/users').loginAs(nobody).json({ fullName: 'X', phone: '5599999001' }),
+      client.get('/api/v1/users').loginAs(nobody),
+      client.get('/api/v1/users/search?q=abc').loginAs(nobody),
+      client.get(`/api/v1/users/${target.id}`).loginAs(nobody),
+      client.put(`/api/v1/users/${target.id}`).loginAs(nobody).json({ fullName: 'Y' }),
+      client.post(`/api/v1/users/${target.id}/reset-login`).loginAs(nobody),
+      client.patch(`/api/v1/users/${target.id}/toggle-status`).loginAs(nobody),
+      client.delete(`/api/v1/users/${target.id}`).loginAs(nobody),
     ])
     for (const response of responses) response.assertStatus(403)
   })
 
-  test('worker holds create/view/update but not erase', async ({ client }) => {
-    const worker = await createWorker()
-    const target = await createCustomer()
+  // The target is a zero-grant user, not a customer. `assertCanActOnUser` refuses to
+  // let anyone act on a user whose effective permissions are not a subset of their own
+  // (users_controller.ts) — a `customer` target holds courts.view + reservations.vcue,
+  // so a manager granted only `users.*` would be blocked by THAT rule and the 403 would
+  // say nothing about the route's gate. The escalation rule has its own spec file
+  // (user_privilege_escalation.spec.ts); keep it out of the wiring proof.
+  test('users.view/create/update open their own routes', async ({ client }) => {
+    const manager = await createUserWithPermissions({
+      users: { view: true, create: true, update: true },
+    })
+    const target = await createUserWithPermissions()
 
-    const create = await client
-      .post('/api/v1/users')
-      .loginAs(worker)
-      .json({ fullName: 'Nuevo Cliente', phone: '5599999002' })
+    // A bare role is assignable by anyone (D7 compares the assigned role's grants
+    // against the actor's); the default `customer` is not, and would 403 on that
+    // rule instead of on this route's gate. Email is required for any non-customer.
+    const assignable = await createBareRole()
+    const create = await client.post('/api/v1/users').loginAs(manager).json({
+      fullName: 'Nuevo Cliente',
+      phone: '5599999002',
+      email: 'nuevo.cliente@example.test',
+      role: assignable.name,
+    })
     create.assertStatus(201)
 
-    const view = await client.get('/api/v1/users').loginAs(worker)
+    const view = await client.get('/api/v1/users').loginAs(manager)
     view.assertStatus(200)
+
+    const search = await client.get('/api/v1/users/search?q=Fixture').loginAs(manager)
+    search.assertStatus(200)
 
     const update = await client
       .put(`/api/v1/users/${target.id}`)
-      .loginAs(worker)
+      .loginAs(manager)
       .json({ fullName: 'Editado' })
     update.assertStatus(200)
+  })
 
-    const toggleStatus = await client.patch(`/api/v1/users/${target.id}/toggle-status`).loginAs(worker)
+  // Both destructive routes are gated on `users.erase`, and toggle-status is the
+  // easy one to get wrong — it reads as an update but deactivating an account is
+  // treated as destructive on purpose.
+  test('users.view/create/update do NOT open toggle-status or delete (both need erase)', async ({
+    client,
+  }) => {
+    const manager = await createUserWithPermissions({
+      users: { view: true, create: true, update: true },
+    })
+    const target = await createUserWithPermissions()
+
+    const toggleStatus = await client
+      .patch(`/api/v1/users/${target.id}/toggle-status`)
+      .loginAs(manager)
     toggleStatus.assertStatus(403)
 
-    const destroy = await client.delete(`/api/v1/users/${target.id}`).loginAs(worker)
+    const destroy = await client.delete(`/api/v1/users/${target.id}`).loginAs(manager)
     destroy.assertStatus(403)
   })
 
-  test('admin holds every users action, including erase', async ({ client }) => {
-    const admin = await createAdmin()
-    const target = await createCustomer()
+  test('users.erase opens toggle-status and delete', async ({ client }) => {
+    const remover = await createUserWithPermissions({ users: { view: true, erase: true } })
+    const target = await createUserWithPermissions()
 
-    const toggleStatus = await client.patch(`/api/v1/users/${target.id}/toggle-status`).loginAs(admin)
+    const toggleStatus = await client
+      .patch(`/api/v1/users/${target.id}/toggle-status`)
+      .loginAs(remover)
     toggleStatus.assertStatus(200)
 
-    const destroy = await client.delete(`/api/v1/users/${target.id}`).loginAs(admin)
+    const destroy = await client.delete(`/api/v1/users/${target.id}`).loginAs(remover)
     destroy.assertStatus(200)
   })
 })
@@ -151,41 +187,30 @@ test.group('route permission wiring — users', (group) => {
 test.group('route permission wiring — courts', (group) => {
   group.each.setup(() => testUtils.db().withGlobalTransaction())
 
-  test('customer cannot write to courts (only holds courts.view, via unannotated public routes)', async ({
-    client,
-  }) => {
-    const customer = await createCustomer()
+  // courts.view is deliberately NOT enough to write — GET /courts is a public
+  // unannotated route, so a read-only grant must still bounce off every write.
+  test('courts.view alone cannot write to courts', async ({ client }) => {
+    const viewer = await createUserWithPermissions({ courts: { view: true } })
     const court = await createPadelCourt()
 
     const create = await client
       .post('/api/v1/courts')
-      .loginAs(customer)
+      .loginAs(viewer)
       .json({ name: 'Cancha X', type: 'padel', pricePerHour: 1000 })
     create.assertStatus(403)
 
     const update = await client
       .put(`/api/v1/courts/${court.id}`)
-      .loginAs(customer)
+      .loginAs(viewer)
       .json({ name: 'Y', type: 'padel', pricePerHour: 1000 })
     update.assertStatus(403)
 
-    const destroy = await client.delete(`/api/v1/courts/${court.id}`).loginAs(customer)
+    const destroy = await client.delete(`/api/v1/courts/${court.id}`).loginAs(viewer)
     destroy.assertStatus(403)
   })
 
-  // Which verbs `worker` actually holds on `courts` is a business call made
-  // through the Roles ABM (today: view-only — no edit/delete) and can change
-  // without this file going red. So each verb's wiring is proven with a grant
-  // scoped to exactly that verb, not the `worker` role. See engram (padel) for
-  // the tracked follow-up to convert the rest of this suite the same way.
   test('a user granted courts.create can create a court', async ({ client }) => {
-    const grantee = await createCustomer()
-    await setUserPermission(grantee.id, 'courts', {
-      view: true,
-      create: true,
-      update: false,
-      erase: false,
-    })
+    const grantee = await createUserWithPermissions({ courts: { view: true, create: true } })
     const create = await client
       .post('/api/v1/courts')
       .loginAs(grantee)
@@ -194,13 +219,7 @@ test.group('route permission wiring — courts', (group) => {
   })
 
   test('a user granted courts.update can update a court', async ({ client }) => {
-    const grantee = await createCustomer()
-    await setUserPermission(grantee.id, 'courts', {
-      view: true,
-      create: false,
-      update: true,
-      erase: false,
-    })
+    const grantee = await createUserWithPermissions({ courts: { view: true, update: true } })
     const court = await createPadelCourt()
     const update = await client
       .put(`/api/v1/courts/${court.id}`)
@@ -210,22 +229,9 @@ test.group('route permission wiring — courts', (group) => {
   })
 
   test('a user granted courts.erase can delete a court', async ({ client }) => {
-    const grantee = await createCustomer()
-    await setUserPermission(grantee.id, 'courts', {
-      view: true,
-      create: false,
-      update: false,
-      erase: true,
-    })
+    const grantee = await createUserWithPermissions({ courts: { view: true, erase: true } })
     const court = await createPadelCourt()
     const destroy = await client.delete(`/api/v1/courts/${court.id}`).loginAs(grantee)
-    destroy.assertStatus(200)
-  })
-
-  test('admin holds full courts CRUD', async ({ client }) => {
-    const admin = await createAdmin()
-    const court = await createPadelCourt()
-    const destroy = await client.delete(`/api/v1/courts/${court.id}`).loginAs(admin)
     destroy.assertStatus(200)
   })
 })
@@ -237,35 +243,34 @@ test.group('route permission wiring — courts', (group) => {
 test.group('route permission wiring — reservation_management', (group) => {
   group.each.setup(() => testUtils.db().withGlobalTransaction())
 
-  test('customer is denied on every reservation_management route', async ({ client }) => {
-    const customer = await createCustomer()
+  test('a user holding no reservation_management permission is denied on every route', async ({
+    client,
+  }) => {
+    const nobody = await createUserWithPermissions()
     const court = await createPadelCourt()
-    const reservation = await createRecurringReservation(court, customer)
+    const reservation = await createRecurringReservation(court, nobody)
 
     const responses = await Promise.all([
-      client.patch(`/api/v1/reservations/${reservation.id}/hide-next`).loginAs(customer).json({ date: todayISODate() }),
-      client.patch(`/api/v1/reservations/${reservation.id}/show-next`).loginAs(customer).json({ date: todayISODate() }),
-      client.get(`/api/v1/reservations/${reservation.id}/audit`).loginAs(customer),
-      client.patch(`/api/v1/reservations/${reservation.id}/revert`).loginAs(customer),
+      client
+        .patch(`/api/v1/reservations/${reservation.id}/hide-next`)
+        .loginAs(nobody)
+        .json({ date: todayISODate() }),
+      client
+        .patch(`/api/v1/reservations/${reservation.id}/show-next`)
+        .loginAs(nobody)
+        .json({ date: todayISODate() }),
+      client.get(`/api/v1/reservations/${reservation.id}/audit`).loginAs(nobody),
+      client.patch(`/api/v1/reservations/${reservation.id}/revert`).loginAs(nobody),
     ])
     for (const response of responses) response.assertStatus(403)
   })
 
-  // Whether `worker` holds reservation_management.erase is a business call made
-  // through the Roles ABM and can change without this file going red — see
-  // engram (padel) for the tracked follow-up to convert the rest of this suite
-  // the same way. What must always hold, regardless of which role has what: a
-  // user granted view+update passes those gates but not erase (revert).
-  test('a user granted reservation_management.view/update passes those gates but not erase (revert)', async ({
+  test('reservation_management.view/update pass their gates but do NOT open revert (erase)', async ({
     client,
     assert,
   }) => {
-    const grantee = await createCustomer()
-    await setUserPermission(grantee.id, 'reservation_management', {
-      view: true,
-      create: false,
-      update: true,
-      erase: false,
+    const grantee = await createUserWithPermissions({
+      reservation_management: { view: true, update: true },
     })
     const court = await createPadelCourt()
     const reservation = await createRecurringReservation(court, grantee)
@@ -287,21 +292,16 @@ test.group('route permission wiring — reservation_management', (group) => {
     revert.assertStatus(403)
   })
 
-  test('admin passes the gate on every reservation_management route', async ({ client, assert }) => {
-    const admin = await createAdmin()
+  test('reservation_management.erase opens revert', async ({ client, assert }) => {
+    const grantee = await createUserWithPermissions({
+      reservation_management: { view: true, update: true, erase: true },
+    })
     const court = await createPadelCourt()
-    const reservation = await createRecurringReservation(court, admin)
+    const reservation = await createRecurringReservation(court, grantee)
 
-    const hideNext = await client
-      .patch(`/api/v1/reservations/${reservation.id}/hide-next`)
-      .loginAs(admin)
-      .json({ date: todayISODate() })
-    assert.notEqual(hideNext.status(), 403)
-
-    const auditLogs = await client.get(`/api/v1/reservations/${reservation.id}/audit`).loginAs(admin)
-    assert.notEqual(auditLogs.status(), 403)
-
-    const revert = await client.patch(`/api/v1/reservations/${reservation.id}/revert`).loginAs(admin)
+    const revert = await client
+      .patch(`/api/v1/reservations/${reservation.id}/revert`)
+      .loginAs(grantee)
     assert.notEqual(revert.status(), 403)
   })
 })
@@ -309,81 +309,96 @@ test.group('route permission wiring — reservation_management', (group) => {
 test.group('route permission wiring — payments', (group) => {
   group.each.setup(() => testUtils.db().withGlobalTransaction())
 
-  test('customer is denied on every payments route', async ({ client }) => {
-    const customer = await createCustomer()
+  test('a user holding no payments permission is denied on every payments route', async ({
+    client,
+  }) => {
+    const nobody = await createUserWithPermissions()
     const court = await createPadelCourt()
-    const reservation = await createRecurringReservation(court, customer)
+    const reservation = await createRecurringReservation(court, nobody)
 
     const responses = await Promise.all([
-      client.patch(`/api/v1/reservations/${reservation.id}/pay-deposit`).loginAs(customer).json({}),
-      client.patch(`/api/v1/reservations/${reservation.id}/pay-total`).loginAs(customer).json({}),
-      client.delete(`/api/v1/reservations/${reservation.id}/payments`).loginAs(customer),
+      client.patch(`/api/v1/reservations/${reservation.id}/pay-deposit`).loginAs(nobody).json({}),
+      client.patch(`/api/v1/reservations/${reservation.id}/pay-total`).loginAs(nobody).json({}),
+      client.delete(`/api/v1/reservations/${reservation.id}/payments`).loginAs(nobody),
     ])
     for (const response of responses) response.assertStatus(403)
   })
 
-  test('worker passes the gate on payments.create but not payments.erase', async ({ client, assert }) => {
-    const worker = await createWorker()
+  test('payments.create passes the charging gates but does NOT open reverting (erase)', async ({
+    client,
+    assert,
+  }) => {
+    const cashier = await createUserWithPermissions({ payments: { view: true, create: true } })
     const court = await createPadelCourt()
-    const reservation = await createRecurringReservation(court, worker)
+    const reservation = await createRecurringReservation(court, cashier)
 
     const payDeposit = await client
       .patch(`/api/v1/reservations/${reservation.id}/pay-deposit`)
-      .loginAs(worker)
+      .loginAs(cashier)
       .json({ efectivo: 1000, transferencia: 0, postnet: 0 })
     assert.notEqual(payDeposit.status(), 403)
 
-    const revertAll = await client.delete(`/api/v1/reservations/${reservation.id}/payments`).loginAs(worker)
+    const revertAll = await client
+      .delete(`/api/v1/reservations/${reservation.id}/payments`)
+      .loginAs(cashier)
     revertAll.assertStatus(403)
   })
 
-  test('admin passes the gate on every payments route', async ({ client, assert }) => {
-    const admin = await createAdmin()
+  test('payments.erase opens reverting payments', async ({ client, assert }) => {
+    const supervisor = await createUserWithPermissions({
+      payments: { view: true, create: true, erase: true },
+    })
     const court = await createPadelCourt()
-    const reservation = await createRecurringReservation(court, admin)
+    const reservation = await createRecurringReservation(court, supervisor)
 
-    const payDeposit = await client
-      .patch(`/api/v1/reservations/${reservation.id}/pay-deposit`)
-      .loginAs(admin)
-      .json({ efectivo: 1000, transferencia: 0, postnet: 0 })
-    assert.notEqual(payDeposit.status(), 403)
-
-    const revertAll = await client.delete(`/api/v1/reservations/${reservation.id}/payments`).loginAs(admin)
+    const revertAll = await client
+      .delete(`/api/v1/reservations/${reservation.id}/payments`)
+      .loginAs(supervisor)
     assert.notEqual(revertAll.status(), 403)
   })
 })
 
-// `reservations` has no `role_middleware` wrapper today — every authenticated role holds
-// reservations.vcue in the seeded matrix, so there is no role to assert a 403 against here.
-// The meaningful wiring proof is the opposite: a typo'd module name would 403 everyone,
-// including the most restrictive role (customer) — so proving customer passes is the real test.
+// Every SEEDED role holds reservations.vcue, which is why this group used to have no
+// denial test at all — there was no role to point at. A zero-grant user gives us one,
+// so the gate on these routes is now proven in both directions like every other module.
 test.group('route permission wiring — reservations', (group) => {
   group.each.setup(() => testUtils.db().withGlobalTransaction())
 
-  test('customer, worker and admin all pass the reservations.view gate', async ({ client, assert }) => {
-    const customer = await createCustomer()
-    const worker = await createWorker()
-    const admin = await createAdmin()
-
-    const responses = await Promise.all([
-      client.get('/api/v1/reservations').loginAs(customer),
-      client.get('/api/v1/reservations').loginAs(worker),
-      client.get('/api/v1/reservations').loginAs(admin),
-    ])
-    for (const response of responses) assert.notEqual(response.status(), 403)
-  })
-
-  test('customer can create/update/erase their own reservation (reservations.create/update/erase gate passes)', async ({
+  test('a user holding no reservations permission is denied on the reservations routes', async ({
     client,
-    assert,
   }) => {
-    const customer = await createCustomer()
+    const nobody = await createUserWithPermissions()
     const court = await createPadelCourt()
 
     const start = new Date()
     start.setHours(start.getHours() + 3, 0, 0, 0)
 
-    const create = await client.post('/api/v1/reservations').loginAs(customer).json({
+    const responses = await Promise.all([
+      client.get('/api/v1/reservations').loginAs(nobody),
+      client
+        .post('/api/v1/reservations')
+        .loginAs(nobody)
+        .json({ courtId: court.id, startTime: start.toISOString(), duration: 60 }),
+    ])
+    for (const response of responses) response.assertStatus(403)
+  })
+
+  test('reservations.view opens the listing, and create opens booking', async ({
+    client,
+    assert,
+  }) => {
+    const booker = await createUserWithPermissions({
+      reservations: { view: true, create: true },
+    })
+    const court = await createPadelCourt()
+
+    const list = await client.get('/api/v1/reservations').loginAs(booker)
+    list.assertStatus(200)
+
+    const start = new Date()
+    start.setHours(start.getHours() + 3, 0, 0, 0)
+
+    const create = await client.post('/api/v1/reservations').loginAs(booker).json({
       courtId: court.id,
       startTime: start.toISOString(),
       duration: 60,

@@ -1,16 +1,18 @@
 import { test } from '@japa/runner'
 import testUtils from '@adonisjs/core/services/test_utils'
-import { setUserPermission } from '#services/permissions'
-import { createAdmin, createCustomer, createProduct, createWorker } from './fixtures.js'
+import { createAdmin, createProduct, createUserWithPermissions } from './fixtures.js'
 
 /**
  * Wiring proof for the two commerce modules, in the same spirit as
- * route_permission_wiring.spec.ts: that each route carries the annotation it is
- * supposed to carry, and that the seeded matrix means what it says.
+ * route_permission_wiring.spec.ts — and on the same terms: every gate is asserted
+ * against a PERMISSION, never a role name, because which role sells and which one
+ * reprices is a business decision the Roles ABM can change at any time.
  *
- * The one that actually matters is the products/sales SPLIT — the whole reason
- * commerce ships as two modules instead of one. A worker holds `products.vu`
- * and `sales.vc`: sells, restocks, and cannot reprice or void.
+ * What actually matters here is the products/sales SPLIT — the whole reason
+ * commerce ships as two modules instead of one. Selling and setting prices are
+ * different jobs: a kiosk attendant needs `sales.create` WITHOUT `products.update`,
+ * or anyone allowed to ring up a sale could rewrite the price list. The tests below
+ * pin that split by verb, so it survives any future role reshuffle.
  */
 
 // The typed client keys `.body()` by PATH, so a path serving both a list and a
@@ -19,111 +21,103 @@ import { createAdmin, createCustomer, createProduct, createWorker } from './fixt
 type JsonResponse = { body(): unknown }
 const idOf = (r: JsonResponse) => (r.body() as { id: number }).id
 
-test.group('commerce permissions — customers are locked out entirely', (group) => {
+test.group('commerce permissions — no commerce grant means no commerce at all', (group) => {
   group.each.setup(() => testUtils.db().withGlobalTransaction())
 
-  test('customer cannot list products', async ({ client }) => {
-    const customer = await createCustomer()
-    const response = await client.get('/api/v1/products').loginAs(customer)
-    response.assertStatus(403)
-  })
-
-  test('customer cannot read the POS catalog', async ({ client }) => {
-    const customer = await createCustomer()
-    const response = await client.get('/api/v1/products/catalog').loginAs(customer)
-    response.assertStatus(403)
-  })
-
-  test('customer cannot list sales', async ({ client }) => {
-    const customer = await createCustomer()
-    const response = await client.get('/api/v1/sales').loginAs(customer)
-    response.assertStatus(403)
-  })
-
-  test('customer cannot create a sale', async ({ client }) => {
-    const customer = await createCustomer()
+  test('a user holding neither products nor sales is locked out of every commerce route', async ({
+    client,
+  }) => {
+    const nobody = await createUserWithPermissions()
     const product = await createProduct()
-    const response = await client
-      .post('/api/v1/sales')
-      .loginAs(customer)
-      .json({ items: [{ productId: product.id, quantity: 1 }] })
-    response.assertStatus(403)
+
+    const responses = await Promise.all([
+      client.get('/api/v1/products').loginAs(nobody),
+      client.get('/api/v1/products/catalog').loginAs(nobody),
+      client.get('/api/v1/product-categories').loginAs(nobody),
+      client.get('/api/v1/sales').loginAs(nobody),
+      client
+        .post('/api/v1/sales')
+        .loginAs(nobody)
+        .json({ items: [{ productId: product.id, quantity: 1 }] }),
+    ])
+    for (const response of responses) response.assertStatus(403)
   })
 })
 
-test.group('commerce permissions — the worker split', (group) => {
+test.group('commerce permissions — the products/sales split', (group) => {
   group.each.setup(() => testUtils.db().withGlobalTransaction())
 
-  test('worker can read the catalog and sell', async ({ client }) => {
-    const worker = await createWorker()
+  // The POS reading endpoints carry `or: { module: 'sales', action: 'create' }` so a
+  // grant that only SELLS still opens the till with a populated grid. Without the
+  // `or`, a seller would face an empty catalog — this is what proves it is wired.
+  test('sales.create alone opens the POS reading endpoints and selling', async ({ client }) => {
+    const seller = await createUserWithPermissions({ sales: { view: true, create: true } })
     const product = await createProduct({ price: 900, stock: 5 })
 
-    const catalog = await client.get('/api/v1/products/catalog').loginAs(worker)
+    const catalog = await client.get('/api/v1/products/catalog').loginAs(seller)
     catalog.assertStatus(200)
+
+    const categories = await client.get('/api/v1/product-categories').loginAs(seller)
+    categories.assertStatus(200)
 
     const sale = await client
       .post('/api/v1/sales')
-      .loginAs(worker)
+      .loginAs(seller)
       .json({ items: [{ productId: product.id, quantity: 1 }], efectivo: 900 })
     sale.assertStatus(201)
   })
 
-  test('worker can restock — `products.update` covers the stock endpoint', async ({ client }) => {
-    const worker = await createWorker()
+  // Selling must NOT imply repricing — the entire reason these are two modules.
+  test('sales.create does NOT open the price list', async ({ client }) => {
+    const seller = await createUserWithPermissions({ sales: { view: true, create: true } })
+    const product = await createProduct({ price: 900 })
+
+    const create = await client
+      .post('/api/v1/products')
+      .loginAs(seller)
+      .json({ name: 'Paleta trucha', price: 1 })
+    create.assertStatus(403)
+
+    const reprice = await client
+      .put(`/api/v1/products/${product.id}`)
+      .loginAs(seller)
+      .json({ name: product.name, price: 1 })
+    reprice.assertStatus(403)
+  })
+
+  test('products.update covers the stock endpoint — restocking is not repricing', async ({
+    client,
+  }) => {
+    const restocker = await createUserWithPermissions({ products: { view: true, update: true } })
     const product = await createProduct({ stock: 1 })
     const response = await client
       .post(`/api/v1/products/${product.id}/stock`)
-      .loginAs(worker)
+      .loginAs(restocker)
       .json({ type: 'in', quantity: 5, reason: 'Reposición' })
     response.assertStatus(200)
   })
 
-  // These four assert the products/sales VERB split itself — holding view+update
-  // on a module must not imply create/erase — so they use a permission grant
-  // scoped to exactly that, rather than the `worker` role. Which roles hold which
-  // verbs is a business call made through the Roles ABM and can change without
-  // this file going red; see engram (padel) for the tracked follow-up to convert
-  // the rest of this suite the same way.
-  test('holding products.view+update does NOT grant products.create — that is the price list', async ({
+  // The verb split WITHIN each module: view+update must not leak create or erase.
+  test('products.view+update does NOT grant products.create — that is the price list', async ({
     client,
   }) => {
-    const seller = await createCustomer()
-    await setUserPermission(seller.id, 'products', {
-      view: true,
-      create: false,
-      update: true,
-      erase: false,
-    })
+    const restocker = await createUserWithPermissions({ products: { view: true, update: true } })
     const response = await client
       .post('/api/v1/products')
-      .loginAs(seller)
+      .loginAs(restocker)
       .json({ name: 'Paleta trucha', price: 1 })
     response.assertStatus(403)
   })
 
-  test('holding products.view+update does NOT grant products.erase', async ({ client }) => {
-    const seller = await createCustomer()
-    await setUserPermission(seller.id, 'products', {
-      view: true,
-      create: false,
-      update: true,
-      erase: false,
-    })
+  test('products.view+update does NOT grant products.erase', async ({ client }) => {
+    const restocker = await createUserWithPermissions({ products: { view: true, update: true } })
     const product = await createProduct()
-    const response = await client.delete(`/api/v1/products/${product.id}`).loginAs(seller)
+    const response = await client.delete(`/api/v1/products/${product.id}`).loginAs(restocker)
     response.assertStatus(403)
   })
 
-  test('holding sales.view+create does NOT grant sales.erase — cannot void a sale', async ({
-    client,
-  }) => {
-    const seller = await createCustomer()
-    await setUserPermission(seller.id, 'sales', {
-      view: true,
-      create: true,
-      update: false,
-      erase: false,
-    })
+  test('sales.view+create does NOT grant sales.erase — cannot void a sale', async ({ client }) => {
+    const seller = await createUserWithPermissions({ sales: { view: true, create: true } })
     const admin = await createAdmin()
     const product = await createProduct({ price: 900, stock: 5 })
 
@@ -136,25 +130,23 @@ test.group('commerce permissions — the worker split', (group) => {
     response.assertStatus(403)
   })
 
-  test('holding products.view+update does NOT grant category creation — categories gate on products.create', async ({
+  test('products.view+update does NOT grant category creation — categories gate on products.create', async ({
     client,
   }) => {
-    const seller = await createCustomer()
-    await setUserPermission(seller.id, 'products', {
-      view: true,
-      create: false,
-      update: true,
-      erase: false,
-    })
+    const restocker = await createUserWithPermissions({ products: { view: true, update: true } })
     const response = await client
       .post('/api/v1/product-categories')
-      .loginAs(seller)
+      .loginAs(restocker)
       .json({ name: 'Categoría trucha' })
     response.assertStatus(403)
   })
 })
 
-test.group('commerce permissions — admin holds everything', (group) => {
+// These exercise the product/category lifecycle end to end, not the permission gates.
+// `createAdmin()` is just a convenient actor that holds every commerce verb — the role
+// is incidental here, and a full grant expressed as permissions would say the same
+// thing more verbosely. The gates themselves are pinned by the groups above.
+test.group('commerce — full product lifecycle (permissions not under test)', (group) => {
   group.each.setup(() => testUtils.db().withGlobalTransaction())
 
   test('admin can run the full product lifecycle', async ({ client, assert }) => {
