@@ -250,6 +250,99 @@ export default class StatsController {
       cajaTotal,
     }
 
+    // ── Shop revenue (commerce module) ─────────────────────────────────────
+    // Kept as its OWN block instead of being folded into paymentBreakdown/reconciliation.
+    // Those two carry an invariant — grandTotal = cajaTotal = facturado + senasSinSaldar —
+    // that is about court money only; adding shop sales into them would make the
+    // reconciliation stop reconciling. The combined register is exposed explicitly as
+    // `cajaGeneral` below instead of being smuggled into the court numbers.
+    //
+    // Cancelled sales are excluded everywhere here: a voided ticket collected nothing.
+    // Sales are filtered on created_at — a shop sale happens when it is rung up, with none of
+    // the occurrence_date subtlety that recurring reservations have.
+    const salesExpr =
+      paymentMethod === 'efectivo'
+        ? 's.efectivo'
+        : paymentMethod === 'transferencia'
+          ? 's.transferencia'
+          : paymentMethod === 'postnet'
+            ? 's.postnet'
+            : 's.total'
+
+    const commerceRes = await db.rawQuery(
+      `
+      SELECT
+        COALESCE(SUM(${salesExpr}), 0)  AS total,
+        COALESCE(SUM(s.efectivo), 0)      AS efectivo,
+        COALESCE(SUM(s.transferencia), 0) AS transferencia,
+        COALESCE(SUM(s.postnet), 0)       AS postnet,
+        COUNT(s.id)                       AS sales_count
+      FROM sales s
+      WHERE s.status = 'completed'
+        AND s.created_at >= ? AND s.created_at <= ?
+    `,
+      [fromSQL, toSQL]
+    )
+    const cRow = (commerceRes[0] as any[])[0] || {}
+
+    // Units, cost and margin come from sale_items, which snapshots unit_cost at sale time —
+    // margin has to be computed against what the product cost THEN, not what it costs today.
+    const commerceItemsRes = await db.rawQuery(
+      `
+      SELECT
+        COALESCE(SUM(si.quantity), 0)                    AS units,
+        COALESCE(SUM(si.unit_cost * si.quantity), 0)     AS cost
+      FROM sale_items si
+      INNER JOIN sales s ON s.id = si.sale_id
+      WHERE s.status = 'completed'
+        AND s.created_at >= ? AND s.created_at <= ?
+    `,
+      [fromSQL, toSQL]
+    )
+    const ciRow = (commerceItemsRes[0] as any[])[0] || {}
+
+    const topProductsRes = await db.rawQuery(
+      `
+      SELECT
+        si.product_id                                AS product_id,
+        si.product_name                              AS product_name,
+        SUM(si.quantity)                             AS units,
+        SUM(si.subtotal)                             AS revenue
+      FROM sale_items si
+      INNER JOIN sales s ON s.id = si.sale_id
+      WHERE s.status = 'completed'
+        AND s.created_at >= ? AND s.created_at <= ?
+      GROUP BY si.product_id, si.product_name
+      ORDER BY revenue DESC
+      LIMIT 10
+    `,
+      [fromSQL, toSQL]
+    )
+
+    const round = (value: unknown) => Math.round(Number(value || 0) * 100) / 100
+    const commerceTotal = round(cRow.total)
+    const commerceCost = round(ciRow.cost)
+
+    const commerce = {
+      total: commerceTotal,
+      efectivo: round(cRow.efectivo),
+      transferencia: round(cRow.transferencia),
+      postnet: round(cRow.postnet),
+      salesCount: Number(cRow.sales_count || 0),
+      unitsSold: Number(ciRow.units || 0),
+      cost: commerceCost,
+      margin: round(commerceTotal - commerceCost),
+      topProducts: ((topProductsRes[0] as any[]) || []).map((row) => ({
+        productId: row.product_id,
+        name: row.product_name,
+        units: Number(row.units || 0),
+        revenue: round(row.revenue),
+      })),
+    }
+
+    // What actually went through the register: courts + shop.
+    const cajaGeneral = round(cajaTotal + commerceTotal)
+
     return response.ok({
       period,
       from: from.toISO(),
@@ -258,6 +351,8 @@ export default class StatsController {
       grandTotal,
       paymentBreakdown,
       reconciliation,
+      commerce,
+      cajaGeneral,
     })
   }
 }

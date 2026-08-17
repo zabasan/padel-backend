@@ -2,10 +2,7 @@ import User from '#models/user'
 import type { HttpContext } from '@adonisjs/core/http'
 import hash from '@adonisjs/core/services/hash'
 import { errors } from '@adonisjs/auth'
-
-function serializeUser(user: User) {
-  return { id: user.id, fullName: user.fullName, email: user.email, role: user.role, phone: user.phone, hasLoggedIn: Boolean(user.hasLoggedIn), isSuperUser: Boolean(user.isSuperUser) }
-}
+import { serializeSessionUser } from '#transformers/user_session'
 
 export default class AccessTokensController {
   async store({ request }: HttpContext) {
@@ -66,7 +63,7 @@ export default class AccessTokensController {
     }
 
     const token = await User.accessTokens.create(user)
-    return { user: serializeUser(user), token: token.value!.release() }
+    return { user: await serializeSessionUser(user), token: token.value!.release() }
   }
 
   async destroy({ auth }: HttpContext) {

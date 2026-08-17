@@ -13,6 +13,7 @@ import CourtPriceRange from '#models/court_price_range'
 import CourtPriceHistory from '#models/court_price_history'
 import Reservation from '#models/reservation'
 import Setting from '#models/setting'
+import Product from '#models/product'
 
 const ART_TZ = 'America/Argentina/Buenos_Aires'
 
@@ -29,6 +30,38 @@ export async function createWorker(): Promise<User> {
     phone: unique('phone').slice(0, 15),
     password: await hash.make('fixturepass123'),
     role: 'worker',
+  })
+}
+
+export async function createAdmin(): Promise<User> {
+  return User.create({
+    fullName: 'Fixture Admin',
+    email: `${unique('fixture-admin')}@example.test`,
+    phone: unique('phone').slice(0, 15),
+    password: await hash.make('fixturepass123'),
+    role: 'admin',
+  })
+}
+
+// Zero real users hold this role today — it exists so the RBAC subset guard
+// (D7) has something weaker than admin to test against.
+export async function createSupervisor(): Promise<User> {
+  return User.create({
+    fullName: 'Fixture Supervisor',
+    email: `${unique('fixture-supervisor')}@example.test`,
+    phone: unique('phone').slice(0, 15),
+    password: await hash.make('fixturepass123'),
+    role: 'supervisor',
+  })
+}
+
+export async function createProfessor(): Promise<User> {
+  return User.create({
+    fullName: 'Fixture Professor',
+    email: `${unique('fixture-professor')}@example.test`,
+    phone: unique('phone').slice(0, 15),
+    password: await hash.make('fixturepass123'),
+    role: 'professor',
   })
 }
 
@@ -65,6 +98,42 @@ export async function createPadelCourt(pricePerHour = 2000): Promise<Court> {
   return court
 }
 
+// Football counterpart of createPadelCourt — needed to prove the professor "padel only"
+// rule stays enforced even for actors who can override the hour window.
+export async function createFootballCourt(pricePerHour = 5000): Promise<Court> {
+  const court = await Court.create({
+    name: unique('Fixture Football Court'),
+    type: 'football',
+    description: 'Fixture court for functional tests',
+    pricePerHour,
+    isActive: true,
+  })
+  await CourtPriceRange.create({
+    courtId: court.id,
+    startHour: 0,
+    endHour: 24,
+    pricePerHour,
+    isPeakHour: false,
+    price60Min: pricePerHour,
+    price90Min: Math.round(pricePerHour * 1.5),
+    price120Min: pricePerHour * 2,
+  })
+  return court
+}
+
+// Pins the professor hour window. `.env.test` points at the real dev DB, where an admin may
+// have changed these, so any test asserting on the window must set it explicitly.
+export async function setProfessorHours(startHour: number, endHour: number): Promise<void> {
+  await Setting.updateOrCreate(
+    { key: 'professorStartHour' },
+    { key: 'professorStartHour', value: String(startHour) }
+  )
+  await Setting.updateOrCreate(
+    { key: 'professorEndHour' },
+    { key: 'professorEndHour', value: String(endHour) }
+  )
+}
+
 // Writes one all-day price batch into `court_price_history`, effective from `effectiveFrom`.
 // Call it once per price change so `getHistoricalRanges` has distinct batches to choose from and
 // a test can prove which occurrence date a price was resolved against.
@@ -87,10 +156,51 @@ export async function addCourtPriceHistory(
 }
 
 // Sets/overwrites the recurring-promo settings rows (upsert, safe inside a rolled-back tx).
-export async function setPromoSettings(opts: { enabled: boolean; games: number; freeGames: number }): Promise<void> {
-  await Setting.updateOrCreate({ key: 'recurringPromoEnabled' }, { key: 'recurringPromoEnabled', value: String(opts.enabled) })
-  await Setting.updateOrCreate({ key: 'recurringPromoGames' }, { key: 'recurringPromoGames', value: String(opts.games) })
-  await Setting.updateOrCreate({ key: 'recurringPromoFreeGames' }, { key: 'recurringPromoFreeGames', value: String(opts.freeGames) })
+export async function setPromoSettings(opts: {
+  enabled: boolean
+  games: number
+  freeGames: number
+}): Promise<void> {
+  await Setting.updateOrCreate(
+    { key: 'recurringPromoEnabled' },
+    { key: 'recurringPromoEnabled', value: String(opts.enabled) }
+  )
+  await Setting.updateOrCreate(
+    { key: 'recurringPromoGames' },
+    { key: 'recurringPromoGames', value: String(opts.games) }
+  )
+  await Setting.updateOrCreate(
+    { key: 'recurringPromoFreeGames' },
+    { key: 'recurringPromoFreeGames', value: String(opts.freeGames) }
+  )
+}
+
+// Commerce fixture. Stock is written straight onto the column here on purpose — these tests
+// assert what the CONTROLLERS do to stock, so the starting point has to be set without going
+// through applyStockMovement (which is the thing under test).
+export async function createProduct(
+  opts: {
+    name?: string
+    price?: number
+    cost?: number
+    stock?: number
+    minStock?: number
+    trackStock?: boolean
+    isActive?: boolean
+    categoryId?: number | null
+  } = {}
+): Promise<Product> {
+  return Product.create({
+    name: opts.name ?? unique('Fixture Product'),
+    categoryId: opts.categoryId ?? null,
+    sku: null,
+    price: opts.price ?? 1000,
+    cost: opts.cost ?? 400,
+    stock: opts.stock ?? 10,
+    minStock: opts.minStock ?? 0,
+    trackStock: opts.trackStock ?? true,
+    isActive: opts.isActive ?? true,
+  })
 }
 
 // Today's date/time in ART, used as the deterministic anchor for "next occurrence" math.
@@ -125,7 +235,9 @@ export async function createRecurringReservation(
   const endTime = startTime.plus({ minutes: 60 })
 
   const lastIncrementedAt =
-    opts.lastIncrementedWeeksAgo != null ? today.minus({ weeks: opts.lastIncrementedWeeksAgo }) : null
+    opts.lastIncrementedWeeksAgo != null
+      ? today.minus({ weeks: opts.lastIncrementedWeeksAgo })
+      : null
 
   return Reservation.create({
     courtId: court.id,
@@ -151,15 +263,9 @@ export function todayISODate(): string {
 }
 
 export function weeksAgoISODate(weeks: number): string {
-  return nowART()
-    .startOf('day')
-    .minus({ weeks })
-    .toISODate()!
+  return nowART().startOf('day').minus({ weeks }).toISODate()!
 }
 
 export function weeksAheadISODate(weeks: number): string {
-  return nowART()
-    .startOf('day')
-    .plus({ weeks })
-    .toISODate()!
+  return nowART().startOf('day').plus({ weeks }).toISODate()!
 }

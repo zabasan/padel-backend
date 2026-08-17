@@ -5,6 +5,7 @@ import Court from '#models/court'
 import vine from '@vinejs/vine'
 import { DateTime } from 'luxon'
 import { calculateCourtPrice } from '#services/court_pricing'
+import { serializeSessionUser } from '#transformers/user_session'
 
 const guestReservationValidator = vine.compile(
   vine.object({
@@ -92,15 +93,7 @@ export default class GuestReservationsController {
     const token = await User.accessTokens.create(user)
 
     return {
-      user: {
-        id: user.id,
-        fullName: user.fullName,
-        email: user.email,
-        role: user.role,
-        phone: user.phone,
-        padelCategory: user.padelCategory,
-        hasLoggedIn: user.hasLoggedIn,
-      },
+      user: await serializeSessionUser(user),
       token: token.value!.release(),
       reservation: {
         id: reservation.id,

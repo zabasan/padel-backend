@@ -48,6 +48,29 @@ export interface ApiDefinition {
   completeProfile: {
     store: typeof routes['complete_profile.store']
   }
+  productCategories: {
+    index: typeof routes['product_categories.index']
+    store: typeof routes['product_categories.store']
+    update: typeof routes['product_categories.update']
+    destroy: typeof routes['product_categories.destroy']
+  }
+  products: {
+    catalog: typeof routes['products.catalog']
+    index: typeof routes['products.index']
+    show: typeof routes['products.show']
+    movements: typeof routes['products.movements']
+    store: typeof routes['products.store']
+    update: typeof routes['products.update']
+    toggleActive: typeof routes['products.toggle_active']
+    adjustStock: typeof routes['products.adjust_stock']
+    destroy: typeof routes['products.destroy']
+  }
+  sales: {
+    index: typeof routes['sales.index']
+    show: typeof routes['sales.show']
+    store: typeof routes['sales.store']
+    destroy: typeof routes['sales.destroy']
+  }
   users: {
     store: typeof routes['users.store']
     index: typeof routes['users.index']
@@ -58,10 +81,25 @@ export interface ApiDefinition {
     toggleStatus: typeof routes['users.toggle_status']
     destroy: typeof routes['users.destroy']
   }
+  userPermissions: {
+    show: typeof routes['user_permissions.show']
+    update: typeof routes['user_permissions.update']
+  }
+  roles: {
+    index: typeof routes['roles.index']
+    modules: typeof routes['roles.modules']
+    show: typeof routes['roles.show']
+    store: typeof routes['roles.store']
+    update: typeof routes['roles.update']
+    destroy: typeof routes['roles.destroy']
+  }
   stats: {
     index: typeof routes['stats.index']
   }
   userAuditLogs: {
     index: typeof routes['user_audit_logs.index']
+  }
+  commerceAuditLogs: {
+    index: typeof routes['commerce_audit_logs.index']
   }
 }

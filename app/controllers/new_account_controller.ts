@@ -1,6 +1,7 @@
 import User from '#models/user'
 import { signupValidator } from '#validators/user'
 import type { HttpContext } from '@adonisjs/core/http'
+import { serializeSessionUser } from '#transformers/user_session'
 
 export default class NewAccountController {
   async store({ request }: HttpContext) {
@@ -8,14 +9,7 @@ export default class NewAccountController {
     const user = await User.create({ fullName, email, password, phone, role: 'customer', padelCategory: padelCategory ?? null })
     const token = await User.accessTokens.create(user)
     return {
-      user: {
-        id: user.id,
-        fullName: user.fullName,
-        email: user.email,
-        role: user.role,
-        phone: user.phone,
-        padelCategory: user.padelCategory,
-      },
+      user: await serializeSessionUser(user),
       token: token.value!.release(),
     }
   }

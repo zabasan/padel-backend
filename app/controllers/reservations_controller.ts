@@ -11,6 +11,38 @@ import Setting from '#models/setting'
 import User from '#models/user'
 import reservationCalendarCache from '#services/reservation_calendar_cache'
 import { calculateCourtPrice } from '#services/court_pricing'
+import { can, resolvePermissionsForUser } from '#services/permissions'
+
+/**
+ * "Es personal del complejo": ve y gestiona reservas ajenas, en vez de solo las propias.
+ *
+ * Se deriva del PERMISO y no del nombre del rol, para que un rol creado desde el ABM caiga
+ * del lado correcto. Falla cerrado: sin `reservation_management.view` solo ve lo suyo, así
+ * que un rol nuevo nunca ve de más por olvido.
+ *
+ * La propiedad fila-a-fila (ver solo lo propio) sigue viviendo acá y no en el sistema de
+ * permisos, que es módulo-acción y no modela pertenencia — ver app/services/permissions.ts.
+ */
+async function isStaff(user: User): Promise<boolean> {
+  return can(await resolvePermissionsForUser(user), 'reservation_management', 'view')
+}
+
+/** Puede pasar por encima del corte de "ya pasó" al cancelar o editar. Hoy: solo admin. */
+async function canOverridePastCutoff(user: User): Promise<boolean> {
+  return can(await resolvePermissionsForUser(user), 'reservation_management', 'erase')
+}
+
+/**
+ * Puede reservar fuera de la ventana horaria de profesor (`professorStartHour`/
+ * `professorEndHour`). Hoy: admin y supervisor.
+ *
+ * El gate es puramente por permiso — nunca por nombre de rol. Un profesor
+ * reservando para sí mismo sigue atado a la ventana porque su rol no tiene el
+ * permiso, no porque acá se lo chequee.
+ */
+async function canOverrideProfessorHours(user: User): Promise<boolean> {
+  return can(await resolvePermissionsForUser(user), 'reservation_overrides', 'create')
+}
 import vine from '@vinejs/vine'
 import { DateTime } from 'luxon'
 
@@ -482,13 +514,16 @@ async function serializeReservationRow(
 export default class ReservationsController {
   async index({ auth, request, response }: HttpContext) {
     const user = auth.user!
+    // Se resuelve una sola vez: gobierna las tres ramas (summary, paginada y calendario) y
+    // decide entre "ve todo" y "ve solo lo suyo".
+    const staff = await isStaff(user)
     const from = request.input('from')
     const to = request.input('to')
 
     if (request.input('summary') === 'true') {
       // start_time + is_recurring are needed to weekday-filter recurring rows; stripped before responding.
       let summaryQuery = Reservation.query().select('id', 'status', 'start_time', 'is_recurring')
-      if (user.role === 'customer' || user.role === 'professor') {
+      if (!staff) {
         summaryQuery = summaryQuery.where('user_id', user.id)
       }
       // Mirror the main listing: recurring series are date-independent (the `to` bound still applies).
@@ -514,7 +549,7 @@ export default class ReservationsController {
       let pq = Reservation.query()
         .preload('court').preload('user').preload('customer').preload('hiddenDates').preload('payments')
 
-      if (user.role === 'customer' || user.role === 'professor') {
+      if (!staff) {
         pq = pq.where('user_id', user.id)
       }
       if (idFilter) {
@@ -563,7 +598,7 @@ export default class ReservationsController {
     // Past-dated NON-recurring rows are cached 12h; today-onward rows and every
     // recurring series are always served live. Merged back into one array so the
     // response shape is byte-for-byte the same as the generic path below.
-    if (from && to && (user.role === 'admin' || user.role === 'worker')) {
+    if (from && to && staff) {
       // Force a full DB read (as if no cache key existed) when the client opts out.
       // The fresh past segment is still written back, so this doubles as a refresh.
       const ignoreCache = request.input('ignore_cache') === 'true' || request.input('ignore_cache') === true
@@ -632,7 +667,7 @@ export default class ReservationsController {
 
     let query = Reservation.query().preload('court').preload('user').preload('customer').preload('hiddenDates').preload('payments')
 
-    if (user.role === 'customer' || user.role === 'professor') {
+    if (!staff) {
       query = query.where('user_id', user.id)
     }
 
@@ -669,7 +704,7 @@ export default class ReservationsController {
       .preload('hiddenDates')
       .firstOrFail()
 
-    if ((user.role === 'customer' || user.role === 'professor') && reservation.userId !== user.id) {
+    if (!(await isStaff(user)) && reservation.userId !== user.id) {
       return response.forbidden({ message: 'Acceso denegado' })
     }
 
@@ -725,7 +760,9 @@ export default class ReservationsController {
     // Validate custom duration for padel (professors only) and football (admin/worker only)
     const isPadelCourt = court.type === 'padel'
     const isFootballCourt = court.type === 'football'
-    const isAdminOrWorker = user.role === 'admin' || user.role === 'worker'
+    // Reservar EN NOMBRE DE otro (data.customerId) y fijar precio manual son cosas del
+    // personal, así que salen del permiso de gestión y no del nombre del rol.
+    const isAdminOrWorker = await isStaff(user)
     const isProfessor = user.role === 'professor'
 
     // Determine effective customer
@@ -738,11 +775,20 @@ export default class ReservationsController {
     }
     const targetIsProfessor = targetUser.role === 'professor'
 
-    // Professor restrictions: padel only, within configured hours
+    // Professor restriction 1 — padel only. Sin excepción: el precio de profesor
+    // es tarifa por hora de clase (ver más abajo) y no modela una cancha de fútbol,
+    // así que liberarla daría precios incorrectos, no una reserva más flexible.
     if (isProfessor || targetIsProfessor) {
       if (!isPadelCourt) {
         return response.badRequest({ message: 'Los profesores solo pueden reservar canchas de pádel' })
       }
+    }
+
+    // Professor restriction 2 — dentro de la ventana horaria configurada, que en la
+    // práctica saca a las clases de la franja pico. `reservation_overrides.create`
+    // la saltea: antes esta guarda también frenaba al personal, porque dispara con
+    // `targetIsProfessor` y no mira quién está reservando.
+    if ((isProfessor || targetIsProfessor) && !(await canOverrideProfessorHours(user))) {
       const rows = await Setting.all()
       const cfg: Record<string, string | null> = {}
       for (const r of rows) cfg[r.key] = r.value
@@ -905,21 +951,24 @@ export default class ReservationsController {
     // even if the edit moves the reservation to a different date.
     const originalStartTime = reservation.startTime
 
-    if (user.role === 'customer') {
+    // Solo el personal edita reservas ajenas; el profesor gestiona las suyas. Cualquier otro
+    // rol —cliente, o uno creado desde el ABM sin permisos de gestión— no edita nada.
+    const staff = await isStaff(user)
+    if (!staff && user.role !== 'professor') {
       return response.forbidden({ message: 'Sin permisos para modificar reservas' })
     }
-    if (user.role === 'professor' && reservation.userId !== user.id) {
+    if (!staff && reservation.userId !== user.id) {
       return response.forbidden({ message: 'Acceso denegado' })
     }
 
-    const isAdminOrWorker = user.role === 'admin' || user.role === 'worker'
+    const isAdminOrWorker = staff
 
     // Status-only update (confirm/cancel)
     const status = request.input('status')
     if (status && ['pending', 'confirmed', 'cancelled'].includes(status) && isAdminOrWorker) {
       // Past reservations can only be cancelled by an admin (workers are limited to upcoming ones)
       const isPast = !reservation.isRecurring && reservation.endTime < DateTime.now()
-      if (status === 'cancelled' && isPast && user.role === 'worker') {
+      if (status === 'cancelled' && isPast && !(await canOverridePastCutoff(user))) {
         return response.forbidden({ message: 'Solo un administrador puede cancelar una reserva pasada' })
       }
 
@@ -1143,20 +1192,20 @@ export default class ReservationsController {
     const user = auth.user!
     const reservation = await Reservation.findOrFail(params.id)
 
-    if (user.role === 'customer' && reservation.userId !== user.id) {
+    // Propiedad. Antes esto solo se comprobaba para `customer`, así que un profesor podía
+    // cancelar la reserva de CUALQUIER otro usuario. Sin permisos de gestión: solo la propia.
+    const staff = await isStaff(user)
+    if (!staff && reservation.userId !== user.id) {
       return response.forbidden({ message: 'Acceso denegado' })
     }
 
-    if (reservation.status === 'confirmed') {
-      if (user.role === 'customer') {
-        return response.forbidden({ message: 'Las reservas confirmadas solo pueden cancelarlas admin o empleados' })
-      }
-      // Admin/worker can cancel any confirmed reservation regardless of time
+    if (reservation.status === 'confirmed' && !staff && user.role === 'customer') {
+      return response.forbidden({ message: 'Las reservas confirmadas solo pueden cancelarlas admin o empleados' })
     }
 
-    // Past reservations can only be cancelled by an admin (workers are limited to upcoming ones)
+    // Una reserva pasada solo la cancela quien puede pasar por encima del corte (hoy: admin).
     const isPast = !reservation.isRecurring && reservation.endTime < DateTime.now()
-    if (isPast && user.role === 'worker') {
+    if (isPast && !(await canOverridePastCutoff(user))) {
       return response.forbidden({ message: 'Solo un administrador puede cancelar una reserva pasada' })
     }
 
@@ -1174,7 +1223,7 @@ export default class ReservationsController {
 
   async hideNext({ params, request, auth, response }: HttpContext) {
     const user = auth.user!
-    if (user.role === 'customer' || user.role === 'professor') return response.forbidden({ message: 'Sin permisos' })
+    // Acceso por permiso en la ruta (reservation_management / payments), no por nombre de rol.
 
     const reservation = await Reservation.findOrFail(params.id)
     if (!reservation.isRecurring) return response.badRequest({ message: 'La reserva no es recurrente' })
@@ -1227,7 +1276,7 @@ export default class ReservationsController {
 
   async payDeposit({ params, request, auth, response }: HttpContext) {
     const user = auth.user!
-    if (user.role === 'customer' || user.role === 'professor') return response.forbidden({ message: 'Sin permisos' })
+    // Acceso por permiso en la ruta (reservation_management / payments), no por nombre de rol.
 
     const reservation = await Reservation.findOrFail(params.id)
     // The deposit is a one-time hold per series (also for fijas), so the guard stays series-level.
@@ -1284,7 +1333,7 @@ export default class ReservationsController {
 
   async payTotal({ params, request, auth, response }: HttpContext) {
     const user = auth.user!
-    if (user.role === 'customer' || user.role === 'professor') return response.forbidden({ message: 'Sin permisos' })
+    // Acceso por permiso en la ruta (reservation_management / payments), no por nombre de rol.
 
     const reservation = await Reservation.findOrFail(params.id)
 
@@ -1456,10 +1505,8 @@ export default class ReservationsController {
     return response.ok([...directReservations, ...activeRecurring])
   }
 
-  async showNext({ params, request, auth, response }: HttpContext) {
-    const user = auth.user!
-    if (user.role === 'customer' || user.role === 'professor') return response.forbidden({ message: 'Sin permisos' })
-
+  async showNext({ params, request, response }: HttpContext) {
+    // Acceso: `reservation_management.update` en la ruta, no por nombre de rol.
     const reservation = await Reservation.findOrFail(params.id)
     if (!reservation.isRecurring) return response.badRequest({ message: 'La reserva no es recurrente' })
 
@@ -1482,9 +1529,8 @@ export default class ReservationsController {
     return response.ok(obj)
   }
 
-  async auditLogs({ params, auth, response }: HttpContext) {
-    const user = auth.user!
-    if (user.role !== 'admin' && user.role !== 'worker') return response.forbidden({ message: 'Sin permisos' })
+  async auditLogs({ params, response }: HttpContext) {
+    // Acceso: `reservation_management.view` en la ruta.
 
     const logs = await ReservationAuditLog.query()
       .where('reservation_id', params.id)
@@ -1495,8 +1541,8 @@ export default class ReservationsController {
   }
 
   async revert({ params, auth, response }: HttpContext) {
+    // Acceso: `reservation_management.erase` en la ruta.
     const user = auth.user!
-    if (user.role !== 'admin') return response.forbidden({ message: 'Solo administradores pueden revertir reservas' })
 
     const reservation = await Reservation.findOrFail(params.id)
     if (reservation.status !== 'cancelled') return response.badRequest({ message: 'Solo se pueden revertir reservas canceladas' })
@@ -1512,8 +1558,8 @@ export default class ReservationsController {
   }
 
   async revertPayment({ params, auth, response }: HttpContext) {
+    // Acceso: `payments.erase` en la ruta.
     const user = auth.user!
-    if (user.role !== 'admin') return response.forbidden({ message: 'Solo administradores pueden revertir pagos' })
 
     const reservation = await Reservation.findOrFail(params.id)
     const payment = await ReservationPayment.findOrFail(params.paymentId)
@@ -1558,8 +1604,8 @@ export default class ReservationsController {
   }
 
   async revertAllPayments({ params, auth, response }: HttpContext) {
+    // Acceso: `payments.erase` en la ruta.
     const user = auth.user!
-    if (user.role !== 'admin') return response.forbidden({ message: 'Solo administradores pueden revertir pagos' })
 
     const reservation = await Reservation.findOrFail(params.id)
     const payments = await ReservationPayment.query().where('reservation_id', reservation.id)
@@ -1597,9 +1643,8 @@ export default class ReservationsController {
     return response.ok(reservation)
   }
 
-  async auditLogsAll({ auth, request, response }: HttpContext) {
-    const user = auth.user!
-    if (user.role !== 'admin') return response.forbidden({ message: 'Sin permisos' })
+  async auditLogsAll({ request, response }: HttpContext) {
+    // Acceso: `audit.view` en la ruta.
 
     const currentPage = Math.max(1, Number(request.input('page', 1)) || 1)
     const perPage = Math.min(200, Math.max(1, Number(request.input('perPage', 50)) || 50))

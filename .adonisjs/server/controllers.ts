@@ -5,14 +5,20 @@
 
 export const controllers = {
   AccessTokens: () => import('#controllers/access_tokens_controller'),
+  CommerceAuditLogs: () => import('#controllers/commerce_audit_logs_controller'),
   CompleteProfile: () => import('#controllers/complete_profile_controller'),
   Courts: () => import('#controllers/courts_controller'),
   GuestReservations: () => import('#controllers/guest_reservations_controller'),
   NewAccount: () => import('#controllers/new_account_controller'),
+  ProductCategories: () => import('#controllers/product_categories_controller'),
+  Products: () => import('#controllers/products_controller'),
   Profile: () => import('#controllers/profile_controller'),
   Reservations: () => import('#controllers/reservations_controller'),
+  Roles: () => import('#controllers/roles_controller'),
+  Sales: () => import('#controllers/sales_controller'),
   Settings: () => import('#controllers/settings_controller'),
   Stats: () => import('#controllers/stats_controller'),
   UserAuditLogs: () => import('#controllers/user_audit_logs_controller'),
+  UserPermissions: () => import('#controllers/user_permissions_controller'),
   Users: () => import('#controllers/users_controller'),
 }

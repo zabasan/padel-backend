@@ -40,66 +40,244 @@ router
     // Authenticated routes — require completed profile for non-customers
     router
       .group(() => {
-
         // Courts - write only for admin and worker
-        router
-          .group(() => {
-            router.post('courts', [controllers.Courts, 'store'])
-            router.put('courts/:id', [controllers.Courts, 'update'])
-            router.delete('courts/:id', [controllers.Courts, 'destroy'])
-            router.patch('courts/:id/toggle', [controllers.Courts, 'toggleActive'])
-            router.put('courts/:id/price-ranges', [controllers.Courts, 'updatePriceRanges'])
-          })
-          .use(middleware.role({ roles: ['admin', 'worker'] }))
+        router.group(() => {
+          router
+            .post('courts', [controllers.Courts, 'store'])
+            .use(middleware.permission({ module: 'courts', action: 'create' }))
+          router
+            .put('courts/:id', [controllers.Courts, 'update'])
+            .use(middleware.permission({ module: 'courts', action: 'update' }))
+          router
+            .delete('courts/:id', [controllers.Courts, 'destroy'])
+            .use(middleware.permission({ module: 'courts', action: 'erase' }))
+          router
+            .patch('courts/:id/toggle', [controllers.Courts, 'toggleActive'])
+            .use(middleware.permission({ module: 'courts', action: 'update' }))
+          router
+            .put('courts/:id/price-ranges', [controllers.Courts, 'updatePriceRanges'])
+            .use(middleware.permission({ module: 'courts', action: 'update' }))
+        })
 
         // Reservations - read/create/cancel for all authenticated users
-        router.get('reservations', [controllers.Reservations, 'index'])
-        router.get('reservations/:id', [controllers.Reservations, 'show'])
-        router.post('reservations', [controllers.Reservations, 'store'])
-        router.put('reservations/:id', [controllers.Reservations, 'update'])
-        router.delete('reservations/:id', [controllers.Reservations, 'destroy'])
+        router
+          .get('reservations', [controllers.Reservations, 'index'])
+          .use(middleware.permission({ module: 'reservations', action: 'view' }))
+        router
+          .get('reservations/:id', [controllers.Reservations, 'show'])
+          .use(middleware.permission({ module: 'reservations', action: 'view' }))
+        router
+          .post('reservations', [controllers.Reservations, 'store'])
+          .use(middleware.permission({ module: 'reservations', action: 'create' }))
+        router
+          .put('reservations/:id', [controllers.Reservations, 'update'])
+          .use(middleware.permission({ module: 'reservations', action: 'update' }))
+        router
+          .delete('reservations/:id', [controllers.Reservations, 'destroy'])
+          .use(middleware.permission({ module: 'reservations', action: 'erase' }))
 
         // Reservation management actions - admin and worker only
-        router
-          .group(() => {
-            router.patch('reservations/:id/hide-next', [controllers.Reservations, 'hideNext'])
-            router.patch('reservations/:id/show-next', [controllers.Reservations, 'showNext'])
-            router.patch('reservations/:id/pay-deposit', [controllers.Reservations, 'payDeposit'])
-            router.patch('reservations/:id/pay-total', [controllers.Reservations, 'payTotal'])
-            router.get('reservations/:id/audit', [controllers.Reservations, 'auditLogs'])
-            router.patch('reservations/:id/revert', [controllers.Reservations, 'revert'])
-            router.delete('reservations/:id/payments/:paymentId', [controllers.Reservations, 'revertPayment'])
-            router.delete('reservations/:id/payments', [controllers.Reservations, 'revertAllPayments'])
-          })
-          .use(middleware.role({ roles: ['admin', 'worker'] }))
+        router.group(() => {
+          router
+            .patch('reservations/:id/hide-next', [controllers.Reservations, 'hideNext'])
+            .use(middleware.permission({ module: 'reservation_management', action: 'update' }))
+          router
+            .patch('reservations/:id/show-next', [controllers.Reservations, 'showNext'])
+            .use(middleware.permission({ module: 'reservation_management', action: 'update' }))
+          router
+            .patch('reservations/:id/pay-deposit', [controllers.Reservations, 'payDeposit'])
+            .use(middleware.permission({ module: 'payments', action: 'create' }))
+          router
+            .patch('reservations/:id/pay-total', [controllers.Reservations, 'payTotal'])
+            .use(middleware.permission({ module: 'payments', action: 'create' }))
+          router
+            .get('reservations/:id/audit', [controllers.Reservations, 'auditLogs'])
+            .use(middleware.permission({ module: 'reservation_management', action: 'view' }))
+          // revert()/revertPayment()/revertAllPayments() also carry an inline
+          // `user.role !== 'admin'` check (reservations_controller.ts) — this permission
+          // annotation reproduces that EFFECTIVE admin-only access; the inline guard remains
+          // as defense in depth. See permission_matrix.spec.ts's comment on the same routes.
+          router
+            .patch('reservations/:id/revert', [controllers.Reservations, 'revert'])
+            .use(middleware.permission({ module: 'reservation_management', action: 'erase' }))
+          router
+            .delete('reservations/:id/payments/:paymentId', [
+              controllers.Reservations,
+              'revertPayment',
+            ])
+            .use(middleware.permission({ module: 'payments', action: 'erase' }))
+          router
+            .delete('reservations/:id/payments', [controllers.Reservations, 'revertAllPayments'])
+            .use(middleware.permission({ module: 'payments', action: 'erase' }))
+        })
+
+        // Commerce — catálogo/stock (`products`) y caja del kiosco (`sales`).
+        //
+        // Son dos módulos y no uno porque vender y fijar precios son trabajos
+        // distintos: quien atiende el kiosco necesita `sales.create` sin
+        // `products.update`. Los dos endpoints de LECTURA que alimentan el POS
+        // (categorías y catálogo) llevan el `or` con `sales.create` por la misma
+        // razón que el listado de roles lo lleva con `users.view` — si no, un rol
+        // que solo vende abriría la caja con la grilla vacía.
+        router.group(() => {
+          router.get('product-categories', [controllers.ProductCategories, 'index']).use(
+            middleware.permission({
+              module: 'products',
+              action: 'view',
+              or: { module: 'sales', action: 'create' },
+            })
+          )
+          router
+            .post('product-categories', [controllers.ProductCategories, 'store'])
+            .use(middleware.permission({ module: 'products', action: 'create' }))
+          router
+            .put('product-categories/:id', [controllers.ProductCategories, 'update'])
+            .use(middleware.permission({ module: 'products', action: 'update' }))
+          router
+            .delete('product-categories/:id', [controllers.ProductCategories, 'destroy'])
+            .use(middleware.permission({ module: 'products', action: 'erase' }))
+
+          // ANTES que `products/:id` — al revés, Adonis matchea :id = 'catalog'.
+          router.get('products/catalog', [controllers.Products, 'catalog']).use(
+            middleware.permission({
+              module: 'products',
+              action: 'view',
+              or: { module: 'sales', action: 'create' },
+            })
+          )
+          router
+            .get('products', [controllers.Products, 'index'])
+            .use(middleware.permission({ module: 'products', action: 'view' }))
+          router
+            .get('products/:id', [controllers.Products, 'show'])
+            .use(middleware.permission({ module: 'products', action: 'view' }))
+          router
+            .get('products/:id/movements', [controllers.Products, 'movements'])
+            .use(middleware.permission({ module: 'products', action: 'view' }))
+          router
+            .post('products', [controllers.Products, 'store'])
+            .use(middleware.permission({ module: 'products', action: 'create' }))
+          router
+            .put('products/:id', [controllers.Products, 'update'])
+            .use(middleware.permission({ module: 'products', action: 'update' }))
+          router
+            .patch('products/:id/toggle', [controllers.Products, 'toggleActive'])
+            .use(middleware.permission({ module: 'products', action: 'update' }))
+          router
+            .post('products/:id/stock', [controllers.Products, 'adjustStock'])
+            .use(middleware.permission({ module: 'products', action: 'update' }))
+          router
+            .delete('products/:id', [controllers.Products, 'destroy'])
+            .use(middleware.permission({ module: 'products', action: 'erase' }))
+
+          router
+            .get('sales', [controllers.Sales, 'index'])
+            .use(middleware.permission({ module: 'sales', action: 'view' }))
+          router
+            .get('sales/:id', [controllers.Sales, 'show'])
+            .use(middleware.permission({ module: 'sales', action: 'view' }))
+          router
+            .post('sales', [controllers.Sales, 'store'])
+            .use(middleware.permission({ module: 'sales', action: 'create' }))
+          router
+            .delete('sales/:id', [controllers.Sales, 'destroy'])
+            .use(middleware.permission({ module: 'sales', action: 'erase' }))
+        })
 
         // Users management
-        router
-          .group(() => {
-            router.post('users', [controllers.Users, 'store'])
-            router.get('users', [controllers.Users, 'index'])
-            router.get('users/search', [controllers.Users, 'search'])
-            router.get('users/:id', [controllers.Users, 'show'])
-            router.put('users/:id', [controllers.Users, 'update'])
-            router.post('users/:id/reset-login', [controllers.Users, 'resetLogin'])
-          })
-          .use(middleware.role({ roles: ['admin', 'worker'] }))
+        router.group(() => {
+          router
+            .post('users', [controllers.Users, 'store'])
+            .use(middleware.permission({ module: 'users', action: 'create' }))
+          router
+            .get('users', [controllers.Users, 'index'])
+            .use(middleware.permission({ module: 'users', action: 'view' }))
+          router
+            .get('users/search', [controllers.Users, 'search'])
+            .use(middleware.permission({ module: 'users', action: 'view' }))
+          router
+            .get('users/:id', [controllers.Users, 'show'])
+            .use(middleware.permission({ module: 'users', action: 'view' }))
+          router
+            .put('users/:id', [controllers.Users, 'update'])
+            .use(middleware.permission({ module: 'users', action: 'update' }))
+          router
+            .post('users/:id/reset-login', [controllers.Users, 'resetLogin'])
+            .use(middleware.permission({ module: 'users', action: 'update' }))
+        })
 
         router
-          .group(() => {
-            router.patch('users/:id/toggle-status', [controllers.Users, 'toggleStatus'])
-          })
-          .use(middleware.role({ roles: ['admin'] }))
+          .patch('users/:id/toggle-status', [controllers.Users, 'toggleStatus'])
+          .use(middleware.permission({ module: 'users', action: 'erase' }))
 
-        router
-          .group(() => {
-            router.delete('users/:id', [controllers.Users, 'destroy'])
-            router.get('stats', [controllers.Stats, 'index'])
-            router.put('settings', [controllers.Settings, 'update'])
-            router.get('audit/users', [controllers.UserAuditLogs, 'index'])
-            router.get('audit/reservations', [controllers.Reservations, 'auditLogsAll'])
-          })
-          .use(middleware.role({ roles: ['admin'] }))
+        // Per-user permission extras — separate module from `users` itself, so
+        // admins can grant "manage users" without also granting "manage everyone's
+        // extra permissions" (D6).
+        router.group(() => {
+          router
+            .get('users/:id/permissions', [controllers.UserPermissions, 'show'])
+            .use(middleware.permission({ module: 'user_permissions', action: 'view' }))
+          router
+            .put('users/:id/permissions', [controllers.UserPermissions, 'update'])
+            .use(middleware.permission({ module: 'user_permissions', action: 'update' }))
+        })
+
+        // Roles ABM — everything gated on the `roles` module. `roles.erase` on
+        // DELETE, `roles.create`/`roles.update` on write, `roles.view` on reads
+        // AND on the modules catalog (it exists only to feed this screen).
+        router.group(() => {
+          // Los dos listados salen del ABM pero también alimentan la pantalla de Usuarios: el de
+          // roles llena los <select> de Rol y el filtro, y el catálogo de módulos dibuja la
+          // matriz del tab "Permisos". Por eso aceptan además el permiso de la pantalla que los
+          // consume — si no, administrar usuarios sin acceso al ABM sería imposible.
+          router.get('roles', [controllers.Roles, 'index']).use(
+            middleware.permission({
+              module: 'roles',
+              action: 'view',
+              or: { module: 'users', action: 'view' },
+            })
+          )
+          router.get('modules', [controllers.Roles, 'modules']).use(
+            middleware.permission({
+              module: 'roles',
+              action: 'view',
+              or: { module: 'user_permissions', action: 'view' },
+            })
+          )
+          router
+            .get('roles/:id', [controllers.Roles, 'show'])
+            .use(middleware.permission({ module: 'roles', action: 'view' }))
+          router
+            .post('roles', [controllers.Roles, 'store'])
+            .use(middleware.permission({ module: 'roles', action: 'create' }))
+          router
+            .put('roles/:id', [controllers.Roles, 'update'])
+            .use(middleware.permission({ module: 'roles', action: 'update' }))
+          router
+            .delete('roles/:id', [controllers.Roles, 'destroy'])
+            .use(middleware.permission({ module: 'roles', action: 'erase' }))
+        })
+
+        router.group(() => {
+          router
+            .delete('users/:id', [controllers.Users, 'destroy'])
+            .use(middleware.permission({ module: 'users', action: 'erase' }))
+          router
+            .get('stats', [controllers.Stats, 'index'])
+            .use(middleware.permission({ module: 'stats', action: 'view' }))
+          router
+            .put('settings', [controllers.Settings, 'update'])
+            .use(middleware.permission({ module: 'settings', action: 'update' }))
+          router
+            .get('audit/users', [controllers.UserAuditLogs, 'index'])
+            .use(middleware.permission({ module: 'audit', action: 'view' }))
+          router
+            .get('audit/reservations', [controllers.Reservations, 'auditLogsAll'])
+            .use(middleware.permission({ module: 'audit', action: 'view' }))
+          router
+            .get('audit/commerce', [controllers.CommerceAuditLogs, 'index'])
+            .use(middleware.permission({ module: 'audit', action: 'view' }))
+        })
       })
       .use(middleware.auth())
       .use(middleware.profileComplete())
