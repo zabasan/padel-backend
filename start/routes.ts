@@ -184,6 +184,48 @@ router
             .use(middleware.permission({ module: 'sales', action: 'erase' }))
         })
 
+        // Gastos de las instalaciones (servicios, limpieza, mantenimiento, insumos).
+        //
+        // Módulo `expenses` propio, NO parte de `sales`: cobrar plata y sacar plata son
+        // trabajos distintos, y el gasto es lo único de la app que BAJA el resultado del
+        // período. Quien atiende el kiosco puede necesitar `sales.create` sin poder ver
+        // ni cargar el gasto de un proveedor.
+        //
+        // Ningún gate lleva `or:`, a diferencia del catálogo del POS: no hay otra pantalla
+        // que necesite las categorías de gasto, así que no hay a quién dejar entrar de
+        // costado.
+        router.group(() => {
+          router
+            .get('expense-categories', [controllers.ExpenseCategories, 'index'])
+            .use(middleware.permission({ module: 'expenses', action: 'view' }))
+          router
+            .post('expense-categories', [controllers.ExpenseCategories, 'store'])
+            .use(middleware.permission({ module: 'expenses', action: 'create' }))
+          router
+            .put('expense-categories/:id', [controllers.ExpenseCategories, 'update'])
+            .use(middleware.permission({ module: 'expenses', action: 'update' }))
+          router
+            .delete('expense-categories/:id', [controllers.ExpenseCategories, 'destroy'])
+            .use(middleware.permission({ module: 'expenses', action: 'erase' }))
+
+          router
+            .get('expenses', [controllers.Expenses, 'index'])
+            .use(middleware.permission({ module: 'expenses', action: 'view' }))
+          router
+            .get('expenses/:id', [controllers.Expenses, 'show'])
+            .use(middleware.permission({ module: 'expenses', action: 'view' }))
+          router
+            .post('expenses', [controllers.Expenses, 'store'])
+            .use(middleware.permission({ module: 'expenses', action: 'create' }))
+          router
+            .put('expenses/:id', [controllers.Expenses, 'update'])
+            .use(middleware.permission({ module: 'expenses', action: 'update' }))
+          // Anula, no borra — ver expenses_controller.destroy.
+          router
+            .delete('expenses/:id', [controllers.Expenses, 'destroy'])
+            .use(middleware.permission({ module: 'expenses', action: 'erase' }))
+        })
+
         // Users management
         router.group(() => {
           router

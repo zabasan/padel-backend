@@ -38,6 +38,11 @@ export const MODULES: ModuleDefinition[] = [
   // anyone allowed to ring up a sale could also rewrite the price list.
   { name: 'products', visibleName: 'Productos' },
   { name: 'sales', visibleName: 'Ventas' },
+  // Gastos de las instalaciones (servicios, limpieza, mantenimiento, insumos). Módulo
+  // propio y NO parte de `sales`: cobrar plata y sacar plata son trabajos distintos, y
+  // el gasto es lo único que baja el resultado del período. Quien atiende el kiosco puede
+  // necesitar `sales.create` sin poder cargar ni ver el gasto de un proveedor.
+  { name: 'expenses', visibleName: 'Gastos' },
 ]
 
 export const MODULE_NAMES: string[] = MODULES.map((m) => m.name)
@@ -84,6 +89,7 @@ export const ROLE_PERMISSION_MATRIX: Record<SeededRole, Record<string, ModulePer
     user_permissions: p('vu'),
     products: p('vcue'),
     sales: p('vcue'),
+    expenses: p('vcue'),
   },
   // admin minus `roles` and `user_permissions` — see D6/D7.
   supervisor: {
@@ -100,6 +106,11 @@ export const ROLE_PERMISSION_MATRIX: Record<SeededRole, Record<string, ModulePer
     user_permissions: p(''),
     products: p('vcue'),
     sales: p('vcue'),
+    // Tercera excepción a "supervisor = admin", junto con roles y user_permissions.
+    // Los gastos del complejo son plata del dueño, no de la operación diaria, así que
+    // el día uno los tiene solo admin. El módulo existe aparte justamente para que
+    // habilitárselo al supervisor sea un click en el ABM de Roles y no una migración.
+    expenses: p(''),
   },
   worker: {
     courts: p('vcue'),
@@ -116,6 +127,10 @@ export const ROLE_PERMISSION_MATRIX: Record<SeededRole, Record<string, ModulePer
     // Sells and restocks, but cannot change the price list or void a sale.
     products: p('vu'),
     sales: p('vc'),
+    // Arranca cerrado, como todo módulo nuevo. Cargar un gasto mueve el resultado del
+    // período, así que se concede explícitamente desde el ABM de Roles cuando el complejo
+    // lo decida — no se asume acá.
+    expenses: p(''),
   },
   // Customers and professors hold every verb on `reservations` on purpose:
   // ownership ("only your own") is enforced in the controller, not in this grid.
@@ -133,6 +148,7 @@ export const ROLE_PERMISSION_MATRIX: Record<SeededRole, Record<string, ModulePer
     user_permissions: p(''),
     products: p(''),
     sales: p(''),
+    expenses: p(''),
   },
   professor: {
     courts: p('v'),
@@ -149,5 +165,6 @@ export const ROLE_PERMISSION_MATRIX: Record<SeededRole, Record<string, ModulePer
     user_permissions: p(''),
     products: p(''),
     sales: p(''),
+    expenses: p(''),
   },
 }

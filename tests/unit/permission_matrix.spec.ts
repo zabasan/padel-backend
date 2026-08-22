@@ -264,15 +264,27 @@ test.group("permission matrix — reproduces today's access exactly", () => {
   })
 })
 
+/**
+ * Los módulos que supervisor NO comparte con admin. La lista es corta a propósito:
+ * cada entrada es una decisión de negocio explícita, y el test falla si alguien
+ * agrega un módulo nuevo sin decidir de qué lado cae.
+ *
+ * - roles / user_permissions: D6/D7 — un supervisor no reparte permisos.
+ * - expenses: los gastos del complejo son plata del dueño, no de la operación diaria.
+ *   El módulo existe aparte para que habilitárselo al supervisor sea un click en el
+ *   ABM de Roles; el seed solo fija el estado del día uno.
+ */
+const SUPERVISOR_EXCLUDED_MODULES = ['roles', 'user_permissions', 'expenses']
+
 test.group('permission matrix — supervisor', () => {
-  test('supervisor equals admin minus roles and user_permissions, nothing else differs', ({
+  test('supervisor equals admin minus roles, user_permissions and expenses, nothing else differs', ({
     assert,
   }) => {
     const admin = ROLE_PERMISSION_MATRIX.admin
     const supervisor = ROLE_PERMISSION_MATRIX.supervisor
 
     for (const moduleName of MODULE_NAMES) {
-      if (moduleName === 'roles' || moduleName === 'user_permissions') {
+      if (SUPERVISOR_EXCLUDED_MODULES.includes(moduleName)) {
         assert.deepEqual(
           supervisor[moduleName],
           { view: false, create: false, update: false, erase: false },

@@ -1,10 +1,12 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import { DateTime } from 'luxon'
 import db from '@adonisjs/lucid/services/db'
+import { can, getRequestPermissions } from '#services/permissions'
 
 export default class StatsController {
-  async index({ request, response }: HttpContext) {
-    const period = request.input('period', 'month')  // 'day' | 'month' | 'year'
+  async index(ctx: HttpContext) {
+    const { request, response } = ctx
+    const period = request.input('period', 'month') // 'day' | 'month' | 'year'
     const date = request.input('date', '')
     const paymentMethod = request.input('paymentMethod', '') // 'efectivo' | 'transferencia' | 'postnet' | ''
 
@@ -22,14 +24,14 @@ export default class StatsController {
       from = d.startOf('month')
       to = d.endOf('month')
     } else {
-      const year = date ? parseInt(date) : now.year
+      const year = date ? Number.parseInt(date) : now.year
       from = DateTime.fromObject({ year, month: 1, day: 1 }, { zone: TZ }).startOf('day')
       to = DateTime.fromObject({ year, month: 12, day: 31 }, { zone: TZ }).endOf('day')
     }
 
     const fromSQL = from.toUTC().toSQL()
     const toSQL = to.toUTC().toSQL()
-    const fromDate = from.toISODate()  // YYYY-MM-DD for occurrence_date comparisons
+    const fromDate = from.toISODate() // YYYY-MM-DD for occurrence_date comparisons
     const toDate = to.toISODate()
 
     // ── Court revenue = ALL money COLLECTED per court in the period ──
@@ -41,10 +43,14 @@ export default class StatsController {
     // we sum that method's column instead.
     // completed_reservations still counts only BILLED items (non-rec total_paid=1;
     // recurring occurrences with a type='total' payment).
-    const revenueExpr = paymentMethod === 'efectivo' ? 'rp.efectivo'
-      : paymentMethod === 'transferencia' ? 'rp.transferencia'
-      : paymentMethod === 'postnet' ? 'rp.postnet'
-      : 'rp.total'
+    const revenueExpr =
+      paymentMethod === 'efectivo'
+        ? 'rp.efectivo'
+        : paymentMethod === 'transferencia'
+          ? 'rp.transferencia'
+          : paymentMethod === 'postnet'
+            ? 'rp.postnet'
+            : 'rp.total'
 
     const courtQuery = `
       SELECT
@@ -93,11 +99,22 @@ export default class StatsController {
       GROUP BY c.id, c.name, c.type
       ORDER BY total_revenue DESC, c.name ASC
     `
-    const courtParams = [fromSQL, toSQL, fromDate, toDate, fromSQL, toSQL, fromDate, toDate, fromSQL, toSQL]
+    const courtParams = [
+      fromSQL,
+      toSQL,
+      fromDate,
+      toDate,
+      fromSQL,
+      toSQL,
+      fromDate,
+      toDate,
+      fromSQL,
+      toSQL,
+    ]
 
     const courts = await db.rawQuery(courtQuery, courtParams)
     const rows = courts[0] as any[]
-    const result = rows.map(r => ({
+    const result = rows.map((r) => ({
       id: r.id,
       name: r.name,
       type: r.type,
@@ -181,7 +198,8 @@ export default class StatsController {
     }
 
     // ── Payment method breakdown from reservation_payments table ──
-    const breakdown = await db.rawQuery(`
+    const breakdown = await db.rawQuery(
+      `
       SELECT
         COALESCE(SUM(rp.efectivo), 0)      AS efectivo,
         COALESCE(SUM(rp.transferencia), 0) AS transferencia,
@@ -196,7 +214,9 @@ export default class StatsController {
           OR (r.is_recurring = 1 AND rp.occurrence_date IS NOT NULL AND rp.occurrence_date >= ? AND rp.occurrence_date <= ?)
           OR (r.is_recurring = 1 AND rp.occurrence_date IS NULL AND r.start_time >= ? AND r.start_time <= ?)
         )
-    `, [fromSQL, toSQL, fromDate, toDate, fromSQL, toSQL])
+    `,
+      [fromSQL, toSQL, fromDate, toDate, fromSQL, toSQL]
+    )
 
     const bRow = (breakdown[0] as any[])[0] || {}
     const paymentBreakdown = {
@@ -213,7 +233,8 @@ export default class StatsController {
     //   - recurring occurrences that have a type='total' payment for that occurrence_date
     // "Señas sin saldar" = money collected on payment rows whose reservation/occurrence is
     // NOT billed yet (deposits/partials). It's in caja but not in ingresos.
-    const senasRes = await db.rawQuery(`
+    const senasRes = await db.rawQuery(
+      `
       SELECT COALESCE(SUM(rp.total), 0) AS senas
       FROM reservation_payments rp
       INNER JOIN reservations r ON r.id = rp.reservation_id
@@ -235,7 +256,9 @@ export default class StatsController {
               )
           ))
         )
-    `, [fromSQL, toSQL, fromDate, toDate, fromSQL, toSQL])
+    `,
+      [fromSQL, toSQL, fromDate, toDate, fromSQL, toSQL]
+    )
     const senasSinSaldar = Math.round(Number((senasRes[0] as any[])[0]?.senas || 0) * 100) / 100
 
     // grandTotal now equals the caja total; the reconciliation splits it into facturado
@@ -343,6 +366,97 @@ export default class StatsController {
     // What actually went through the register: courts + shop.
     const cajaGeneral = round(cajaTotal + commerceTotal)
 
+    // ── Gastos de las instalaciones ────────────────────────────────────────
+    // Bloque propio, igual que `commerce` y por la misma razón: paymentBreakdown y
+    // reconciliation cargan la invariante grandTotal = cajaTotal = facturado +
+    // senasSinSaldar, que habla SOLO de plata de canchas. Meter gastos ahí haría que la
+    // reconciliación dejara de reconciliar. El neto se expone explícito como
+    // `resultadoNeto` en vez de contrabandearse dentro de los números de cancha.
+    //
+    // Gateado en `expenses.view`: el gasto tiene su propio permiso, así que quien no lo
+    // tiene no recibe ni el bloque ni el neto. Mandar el neto sin el detalle sería peor
+    // que no mandar nada — un número que no se puede explicar con lo que está en pantalla.
+    //
+    // Se filtra por `expense_date`, NO por `created_at`: la factura de la luz de ayer se
+    // carga hoy y pertenece a ayer. Misma lógica que `occurrence_date` en las fijas.
+    // Los anulados quedan afuera en todas partes: un gasto anulado no salió de la caja.
+    const perms = await getRequestPermissions(ctx)
+    const canSeeExpenses = can(perms, 'expenses', 'view')
+
+    let expenses: {
+      total: number
+      efectivo: number
+      transferencia: number
+      postnet: number
+      count: number
+      byCategory: { categoryId: number | null; name: string; total: number; count: number }[]
+    } | null = null
+    let resultadoNeto: number | null = null
+
+    if (canSeeExpenses) {
+      const expensesExpr =
+        paymentMethod === 'efectivo'
+          ? 'e.efectivo'
+          : paymentMethod === 'transferencia'
+            ? 'e.transferencia'
+            : paymentMethod === 'postnet'
+              ? 'e.postnet'
+              : 'e.amount'
+
+      const expensesRes = await db.rawQuery(
+        `
+        SELECT
+          COALESCE(SUM(${expensesExpr}), 0)  AS total,
+          COALESCE(SUM(e.efectivo), 0)       AS efectivo,
+          COALESCE(SUM(e.transferencia), 0)  AS transferencia,
+          COALESCE(SUM(e.postnet), 0)        AS postnet,
+          COUNT(e.id)                        AS expenses_count
+        FROM expenses e
+        WHERE e.status = 'completed'
+          AND e.expense_date >= ? AND e.expense_date <= ?
+      `,
+        [fromDate, toDate]
+      )
+      const eRow = (expensesRes[0] as any[])[0] || {}
+
+      // LEFT JOIN, no INNER: un gasto sin categoría (o cuya categoría se retiró) tiene que
+      // seguir apareciendo, agrupado como "Sin categoría". Si se cayera, la suma de la
+      // tabla no daría el total de arriba — el primer control que hace cualquiera.
+      const byCategoryRes = await db.rawQuery(
+        `
+        SELECT
+          e.category_id                       AS category_id,
+          ec.name                             AS category_name,
+          COALESCE(SUM(${expensesExpr}), 0)   AS total,
+          COUNT(e.id)                         AS expenses_count
+        FROM expenses e
+        LEFT JOIN expense_categories ec ON ec.id = e.category_id
+        WHERE e.status = 'completed'
+          AND e.expense_date >= ? AND e.expense_date <= ?
+        GROUP BY e.category_id, ec.name
+        ORDER BY total DESC
+      `,
+        [fromDate, toDate]
+      )
+
+      expenses = {
+        total: round(eRow.total),
+        efectivo: round(eRow.efectivo),
+        transferencia: round(eRow.transferencia),
+        postnet: round(eRow.postnet),
+        count: Number(eRow.expenses_count || 0),
+        byCategory: ((byCategoryRes[0] as any[]) || []).map((row) => ({
+          categoryId: row.category_id ?? null,
+          name: row.category_name || 'Sin categoría',
+          total: round(row.total),
+          count: Number(row.expenses_count || 0),
+        })),
+      }
+
+      // Lo que quedó: todo lo que entró por la caja, menos lo que salió.
+      resultadoNeto = round(cajaGeneral - expenses.total)
+    }
+
     return response.ok({
       period,
       from: from.toISO(),
@@ -353,6 +467,7 @@ export default class StatsController {
       reconciliation,
       commerce,
       cajaGeneral,
+      ...(expenses ? { expenses, resultadoNeto } : {}),
     })
   }
 }

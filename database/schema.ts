@@ -134,6 +134,60 @@ export class CourtSchema extends BaseModel {
   declare updatedAt: DateTime | null
 }
 
+export class ExpenseCategorySchema extends BaseModel {
+  static $columns = ['createdAt', 'deletedAt', 'id', 'isActive', 'name', 'updatedAt'] as const
+  $columns = ExpenseCategorySchema.$columns
+  @column.dateTime({ autoCreate: true })
+  declare createdAt: DateTime | null
+  @column.dateTime()
+  declare deletedAt: DateTime | null
+  @column({ isPrimary: true })
+  declare id: number
+  @column()
+  declare isActive: boolean
+  @column()
+  declare name: string
+  @column.dateTime({ autoCreate: true, autoUpdate: true })
+  declare updatedAt: DateTime | null
+}
+
+export class ExpenseSchema extends BaseModel {
+  static $columns = ['amount', 'cancelledAt', 'cancelledBy', 'categoryId', 'createdAt', 'createdBy', 'description', 'efectivo', 'expenseDate', 'id', 'notes', 'postnet', 'status', 'supplier', 'transferencia', 'updatedAt'] as const
+  $columns = ExpenseSchema.$columns
+  @column()
+  declare amount: string
+  @column.dateTime()
+  declare cancelledAt: DateTime | null
+  @column()
+  declare cancelledBy: number | null
+  @column()
+  declare categoryId: number | null
+  @column.dateTime({ autoCreate: true })
+  declare createdAt: DateTime
+  @column()
+  declare createdBy: number
+  @column()
+  declare description: string
+  @column()
+  declare efectivo: string
+  @column.date()
+  declare expenseDate: DateTime
+  @column({ isPrimary: true })
+  declare id: number
+  @column()
+  declare notes: string | null
+  @column()
+  declare postnet: string
+  @column()
+  declare status: string
+  @column()
+  declare supplier: string | null
+  @column()
+  declare transferencia: string
+  @column.dateTime({ autoCreate: true, autoUpdate: true })
+  declare updatedAt: DateTime | null
+}
+
 export class ModuleSchema extends BaseModel {
   static $columns = ['createdAt', 'id', 'name', 'updatedAt', 'visibleName'] as const
   $columns = ModuleSchema.$columns

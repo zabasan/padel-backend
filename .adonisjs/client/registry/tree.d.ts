@@ -71,6 +71,19 @@ export interface ApiDefinition {
     store: typeof routes['sales.store']
     destroy: typeof routes['sales.destroy']
   }
+  expenseCategories: {
+    index: typeof routes['expense_categories.index']
+    store: typeof routes['expense_categories.store']
+    update: typeof routes['expense_categories.update']
+    destroy: typeof routes['expense_categories.destroy']
+  }
+  expenses: {
+    index: typeof routes['expenses.index']
+    show: typeof routes['expenses.show']
+    store: typeof routes['expenses.store']
+    update: typeof routes['expenses.update']
+    destroy: typeof routes['expenses.destroy']
+  }
   users: {
     store: typeof routes['users.store']
     index: typeof routes['users.index']

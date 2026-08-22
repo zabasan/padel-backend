@@ -3,7 +3,12 @@ import type { BelongsTo } from '@adonisjs/lucid/types/relations'
 import { DateTime } from 'luxon'
 import User from '#models/user'
 
-export type CommerceEntityType = 'product' | 'category' | 'sale'
+/**
+ * `expense` y `expense_category` viven acá y no en una tabla propia porque la pregunta
+ * que responde este log es "quién tocó la plata hoy", y productos, ventas y gastos son
+ * la misma tarde y la misma pantalla de Auditoría.
+ */
+export type CommerceEntityType = 'product' | 'category' | 'sale' | 'expense' | 'expense_category'
 export type CommerceAuditAction = 'create' | 'update' | 'delete' | 'cancel' | 'stock'
 
 export default class CommerceAuditLog extends BaseModel {

@@ -23,7 +23,7 @@ export default class CommerceAuditLogsController {
       .orderBy('id', 'desc')
 
     if (performedBy) query = query.where('performed_by', performedBy)
-    if (['product', 'category', 'sale'].includes(entityType)) {
+    if (['product', 'category', 'sale', 'expense', 'expense_category'].includes(entityType)) {
       query = query.where('entity_type', entityType)
     }
     if (date) {

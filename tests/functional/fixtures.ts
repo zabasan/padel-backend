@@ -15,6 +15,8 @@ import Reservation from '#models/reservation'
 import Role from '#models/role'
 import Setting from '#models/setting'
 import Product from '#models/product'
+import Expense from '#models/expense'
+import ExpenseCategory from '#models/expense_category'
 import { setRolePermission, setUserPermission, type ModulePermissions } from '#services/permissions'
 
 const ART_TZ = 'America/Argentina/Buenos_Aires'
@@ -310,6 +312,49 @@ export async function createProduct(
     minStock: opts.minStock ?? 0,
     trackStock: opts.trackStock ?? true,
     isActive: opts.isActive ?? true,
+  })
+}
+
+// Expense fixtures. `expenseDate` defaults to today (ART) so a test that does not care about
+// dating lands inside any "current period" stats window without saying so.
+export async function createExpenseCategory(name?: string): Promise<ExpenseCategory> {
+  return ExpenseCategory.create({
+    name: name ?? unique('Fixture Expense Cat').slice(0, 80),
+    isActive: true,
+  })
+}
+
+export async function createExpense(
+  creator: User,
+  opts: {
+    amount?: number
+    categoryId?: number | null
+    description?: string
+    supplier?: string | null
+    efectivo?: number
+    transferencia?: number
+    postnet?: number
+    expenseDate?: string
+    status?: 'completed' | 'cancelled'
+  } = {}
+): Promise<Expense> {
+  const amount = opts.amount ?? 10000
+  // Mirrors the controller's "no split sent means all cash" rule so a fixture built
+  // without a split is still a coherent row.
+  const efectivo = opts.efectivo ?? (opts.transferencia || opts.postnet ? 0 : amount)
+
+  return Expense.create({
+    categoryId: opts.categoryId ?? null,
+    description: opts.description ?? unique('Fixture Expense').slice(0, 200),
+    supplier: opts.supplier ?? null,
+    amount,
+    efectivo,
+    transferencia: opts.transferencia ?? 0,
+    postnet: opts.postnet ?? 0,
+    expenseDate: DateTime.fromISO(opts.expenseDate ?? todayISODate(), { zone: ART_TZ }),
+    notes: null,
+    status: opts.status ?? 'completed',
+    createdBy: creator.id,
   })
 }
 

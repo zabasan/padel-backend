@@ -49,6 +49,15 @@ export type ScannedRoutes = {
     'sales.show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'sales.store': { paramsTuple?: []; params?: {} }
     'sales.destroy': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'expense_categories.index': { paramsTuple?: []; params?: {} }
+    'expense_categories.store': { paramsTuple?: []; params?: {} }
+    'expense_categories.update': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'expense_categories.destroy': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'expenses.index': { paramsTuple?: []; params?: {} }
+    'expenses.show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'expenses.store': { paramsTuple?: []; params?: {} }
+    'expenses.update': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'expenses.destroy': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'users.store': { paramsTuple?: []; params?: {} }
     'users.index': { paramsTuple?: []; params?: {} }
     'users.search': { paramsTuple?: []; params?: {} }
@@ -87,6 +96,9 @@ export type ScannedRoutes = {
     'products.movements': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'sales.index': { paramsTuple?: []; params?: {} }
     'sales.show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'expense_categories.index': { paramsTuple?: []; params?: {} }
+    'expenses.index': { paramsTuple?: []; params?: {} }
+    'expenses.show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'users.index': { paramsTuple?: []; params?: {} }
     'users.search': { paramsTuple?: []; params?: {} }
     'users.show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
@@ -115,6 +127,9 @@ export type ScannedRoutes = {
     'products.movements': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'sales.index': { paramsTuple?: []; params?: {} }
     'sales.show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'expense_categories.index': { paramsTuple?: []; params?: {} }
+    'expenses.index': { paramsTuple?: []; params?: {} }
+    'expenses.show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'users.index': { paramsTuple?: []; params?: {} }
     'users.search': { paramsTuple?: []; params?: {} }
     'users.show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
@@ -138,6 +153,8 @@ export type ScannedRoutes = {
     'products.store': { paramsTuple?: []; params?: {} }
     'products.adjust_stock': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'sales.store': { paramsTuple?: []; params?: {} }
+    'expense_categories.store': { paramsTuple?: []; params?: {} }
+    'expenses.store': { paramsTuple?: []; params?: {} }
     'users.store': { paramsTuple?: []; params?: {} }
     'users.reset_login': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'roles.store': { paramsTuple?: []; params?: {} }
@@ -149,6 +166,8 @@ export type ScannedRoutes = {
     'reservations.update': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'product_categories.update': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'products.update': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'expense_categories.update': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'expenses.update': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'users.update': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'user_permissions.update': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'roles.update': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
@@ -162,6 +181,8 @@ export type ScannedRoutes = {
     'product_categories.destroy': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'products.destroy': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'sales.destroy': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'expense_categories.destroy': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'expenses.destroy': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'roles.destroy': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'users.destroy': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
   }
