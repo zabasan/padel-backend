@@ -884,10 +884,17 @@ export default class ReservationsController {
       }
     }
 
+    // Precio manual: solo mostrador (`reservation_management`). Que el actor o el cliente
+    // sean profesores ya no otorga la autoridad — la clase del profesor se cobra siempre a
+    // la tarifa configurada. Se resuelve una sola vez para que el precio efectivo y la
+    // columna no puedan divergir: un monto sin autoridad no se cobra NI se persiste, y un
+    // customPrice colgado en la columna congelaría el recálculo por ocurrencia de las fijas.
+    const manualPrice = isAdminOrWorker ? (data.customPrice ?? null) : null
+
     // Price calculation
     let totalPrice: number
-    if (data.customPrice != null && (isProfessor || targetIsProfessor || isAdminOrWorker)) {
-      totalPrice = data.customPrice
+    if (manualPrice !== null) {
+      totalPrice = manualPrice
     } else if (targetIsProfessor || isProfessor) {
       const rows2 = await Setting.all()
       const cfg2: Record<string, string | null> = {}
@@ -927,7 +934,7 @@ export default class ReservationsController {
       totalPaid: false,
       discountPercentage: discountPct,
       consecutiveGames: 0,
-      customPrice: data.customPrice ?? null,
+      customPrice: manualPrice,
       classType: data.classType ?? null,
     })
 
@@ -1085,10 +1092,19 @@ export default class ReservationsController {
     const targetUser = await User.find(reservation.userId)
     const targetIsProfessor = targetUser?.role === 'professor'
 
+    // Un no-staff (el profesor sobre sus propias filas) no puede fijar ni borrar el
+    // precio manual: se preserva el que el mostrador dejó en la fila, y sigue
+    // gobernando totalPrice para que la fila no quede incoherente.
+    const effectiveCustomPrice: number | null = isAdminOrWorker
+      ? data.customPrice !== undefined
+        ? data.customPrice
+        : reservation.customPrice
+      : reservation.customPrice
+
     // Price recalc
     let totalPrice: number
-    if (data.customPrice != null && (isAdminOrWorker || targetIsProfessor)) {
-      totalPrice = data.customPrice
+    if (effectiveCustomPrice !== null) {
+      totalPrice = effectiveCustomPrice
     } else if (targetIsProfessor) {
       const rows2 = await Setting.all()
       const cfg2: Record<string, string | null> = {}
@@ -1123,8 +1139,8 @@ export default class ReservationsController {
     if (data.courtId !== undefined && data.courtId !== reservation.courtId) {
       auditFields['courtId'] = { old: String(reservation.courtId), new: String(data.courtId) }
     }
-    if (data.customPrice !== undefined && data.customPrice !== reservation.customPrice) {
-      auditFields['customPrice'] = { old: String(reservation.customPrice ?? ''), new: String(data.customPrice ?? '') }
+    if (effectiveCustomPrice !== reservation.customPrice) {
+      auditFields['customPrice'] = { old: String(reservation.customPrice ?? ''), new: String(effectiveCustomPrice ?? '') }
     }
     if (data.discountPercentage !== undefined && Number(data.discountPercentage) !== Number(reservation.discountPercentage ?? 0)) {
       auditFields['discountPercentage'] = { old: String(reservation.discountPercentage ?? 0), new: String(data.discountPercentage) }
@@ -1162,7 +1178,7 @@ export default class ReservationsController {
       endTime,
       totalPrice,
       discountPercentage: discountPct,
-      customPrice: data.customPrice !== undefined ? data.customPrice : reservation.customPrice,
+      customPrice: effectiveCustomPrice,
       classType: data.classType !== undefined ? data.classType : reservation.classType,
       contactPhone: data.contactPhone !== undefined ? data.contactPhone : reservation.contactPhone,
       notes: data.notes !== undefined ? data.notes : reservation.notes,

@@ -246,6 +246,26 @@ export async function setProfessorHours(startHour: number, endHour: number): Pro
   )
 }
 
+// Pins the professor class rates. Same reason as setProfessorHours: `.env.test` points at the
+// real dev DB, so any test asserting on a professor price must set it explicitly. Weekday and
+// weekend individual rates default to the SAME value on purpose — a test about who may set a
+// price should not also depend on which weekday "tomorrow" happens to fall on. The weekend
+// surcharge itself is covered in tests/unit/weekend_surcharge.spec.ts.
+export async function setProfessorPrices(opts: {
+  individual: number
+  group: number
+  individualWeekend?: number
+}): Promise<void> {
+  const rows: Record<string, number> = {
+    professorPriceIndividual: opts.individual,
+    professorPriceIndividualWeekend: opts.individualWeekend ?? opts.individual,
+    professorPriceGroup: opts.group,
+  }
+  for (const [key, value] of Object.entries(rows)) {
+    await Setting.updateOrCreate({ key }, { key, value: String(value) })
+  }
+}
+
 // Writes one all-day price batch into `court_price_history`, effective from `effectiveFrom`.
 // Call it once per price change so `getHistoricalRanges` has distinct batches to choose from and
 // a test can prove which occurrence date a price was resolved against.
