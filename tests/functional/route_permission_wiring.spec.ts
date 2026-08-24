@@ -1,6 +1,7 @@
 import { test } from '@japa/runner'
 import testUtils from '@adonisjs/core/services/test_utils'
 import {
+  closeAmbientCashRegister,
   createBareRole,
   createPadelCourt,
   createRecurringReservation,
@@ -303,6 +304,75 @@ test.group('route permission wiring — reservation_management', (group) => {
       .patch(`/api/v1/reservations/${reservation.id}/revert`)
       .loginAs(grantee)
     assert.notEqual(revert.status(), 403)
+  })
+})
+
+/**
+ * Caja: tres verbos y no cuatro. `view` ve el turno y el historial, `create` ABRE,
+ * `update` CIERRA. Abrir y cerrar están separados para que se puedan conceder por
+ * separado desde el ABM de Roles, así que el gate se prueba en ambas direcciones: quien
+ * solo puede abrir NO puede cerrar.
+ */
+test.group('route permission wiring — cash_register', (group) => {
+  group.each.setup(() => testUtils.db().withGlobalTransaction())
+  // Determinismo: sin esto el resultado de abrir la caja depende de si el complejo la
+  // dejó abierta en la app. Ver closeAmbientCashRegister.
+  group.each.setup(async () => {
+    await closeAmbientCashRegister()
+  })
+
+  test('a user holding no cash_register permission cannot read the register', async ({
+    client,
+  }) => {
+    const user = await createUserWithPermissions()
+    const current = await client.get('/api/v1/cash-register/current').loginAs(user)
+    current.assertStatus(403)
+    const sessions = await client.get('/api/v1/cash-register/sessions').loginAs(user)
+    sessions.assertStatus(403)
+  })
+
+  test('cash_register.view reaches current and sessions', async ({ client }) => {
+    const viewer = await createUserWithPermissions({ cash_register: { view: true } })
+    const current = await client.get('/api/v1/cash-register/current').loginAs(viewer)
+    current.assertStatus(200)
+    const sessions = await client.get('/api/v1/cash-register/sessions').loginAs(viewer)
+    sessions.assertStatus(200)
+  })
+
+  test('cash_register.view alone does NOT open opening or closing', async ({ client }) => {
+    const viewer = await createUserWithPermissions({ cash_register: { view: true } })
+    const open = await client.post('/api/v1/cash-register/open').loginAs(viewer).json({})
+    open.assertStatus(403)
+    const close = await client.post('/api/v1/cash-register/close').loginAs(viewer).json({})
+    close.assertStatus(403)
+  })
+
+  test('cash_register.create opens the register but NOT closing it', async ({ client, assert }) => {
+    const opener = await createUserWithPermissions({ cash_register: { create: true } })
+    const open = await client.post('/api/v1/cash-register/open').loginAs(opener).json({})
+    assert.notEqual(open.status(), 403)
+
+    const close = await client.post('/api/v1/cash-register/close').loginAs(opener).json({})
+    close.assertStatus(403)
+  })
+
+  test('cash_register.update opens closing', async ({ client, assert }) => {
+    const closer = await createUserWithPermissions({ cash_register: { update: true } })
+    const close = await client.post('/api/v1/cash-register/close').loginAs(closer).json({})
+    assert.notEqual(close.status(), 403)
+  })
+
+  // rotate es un cierre Y una apertura: lleva los dos gates stackeados (AND).
+  test('rotate needs BOTH update and create', async ({ client, assert }) => {
+    const onlyClose = await createUserWithPermissions({ cash_register: { update: true } })
+    const denied = await client.post('/api/v1/cash-register/rotate').loginAs(onlyClose).json({})
+    denied.assertStatus(403)
+
+    const both = await createUserWithPermissions({
+      cash_register: { update: true, create: true },
+    })
+    const allowed = await client.post('/api/v1/cash-register/rotate').loginAs(both).json({})
+    assert.notEqual(allowed.status(), 403)
   })
 })
 

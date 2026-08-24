@@ -16,8 +16,11 @@ import Role from '#models/role'
 import Setting from '#models/setting'
 import Product from '#models/product'
 import Expense from '#models/expense'
+import CashSession from '#models/cash_session'
 import ExpenseCategory from '#models/expense_category'
 import { setRolePermission, setUserPermission, type ModulePermissions } from '#services/permissions'
+import { loadShifts, shiftForCharge } from '#services/cash_shifts'
+import { newSessionFields } from '#services/cash_register'
 
 const ART_TZ = 'America/Argentina/Buenos_Aires'
 
@@ -379,6 +382,65 @@ export async function createExpense(
 }
 
 // Today's date/time in ART, used as the deterministic anchor for "next occurrence" math.
+/**
+ * Abre la caja del turno que corresponde a AHORA.
+ *
+ * Desde que existe middleware.cashRegister, los ocho endpoints que mueven plata
+ * devuelven 409 si la caja está cerrada. Cualquier grupo funcional que cobre, venda,
+ * cargue un gasto o revierta un pago tiene que abrirla primero:
+ *
+ *   group.each.setup(() => testUtils.db().withGlobalTransaction())
+ *   group.each.setup(async () => { await openCashSession() })
+ *
+ * El orden importa: la transacción va PRIMERO para que la sesión de caja se revierta
+ * con el resto. Si se invierten, la sesión queda commiteada y el próximo test arranca
+ * con una caja abierta que no abrió nadie.
+ */
+export async function openCashSession(opener?: User, openingEfectivo = 0): Promise<CashSession> {
+  // Sin esto, todo test que abra una sesión choca contra la caja que el complejo tenga
+  // abierta en la app. Ver closeAmbientCashRegister.
+  await closeAmbientCashRegister()
+
+  const user = opener ?? (await createStaff())
+  const shifts = await loadShifts()
+  const placement = shiftForCharge(DateTime.now(), shifts)
+  return CashSession.create(newSessionFields(placement, user.id, openingEfectivo))
+}
+
+/**
+ * Deja la caja CERRADA como precondición del test.
+ *
+ * Por qué hace falta: `cash_sessions` tiene un índice UNIQUE sobre `open_marker` que
+ * garantiza el invariante "nunca hay más de una sesión abierta". Esa restricción es
+ * GLOBAL — ve las filas commiteadas fuera de la transacción del test — y `.env.test`
+ * apunta a la base de dev REAL (ver el header de este archivo). Así que alcanza con que
+ * alguien deje la caja abierta en la app para que ~100 tests fallen con
+ * `Duplicate entry '1' for key 'cash_sessions.cash_sessions_open_marker_unique'`.
+ *
+ * Los demás fixtures conviven con la base compartida porque solo crean filas propias y
+ * los tests afirman sobre deltas. La caja es lo primero que introduce un SINGLETON, y un
+ * singleton no tolera una base compartida sin fijar la precondición.
+ *
+ * Por qué no ensucia nada: corre DENTRO de la transacción global del test, así que el
+ * cierre se revierte al terminar y la caja real del complejo queda abierta e intacta.
+ * Por eso es imprescindible registrarlo DESPUÉS de `withGlobalTransaction()`.
+ *
+ * Por qué no vive en un hook global de tests/bootstrap.ts: `suite.onGroup(...)` se
+ * dispara desde `suite.add(group)`, que `createTestGroup()` llama ANTES de ejecutar el
+ * cuerpo del grupo (@japa/runner build/create_test-*.js) — es decir, antes de que el
+ * spec registre su `withGlobalTransaction()`. Un hook así correría fuera de la
+ * transacción y le cerraría al complejo la caja de verdad.
+ */
+export async function closeAmbientCashRegister(): Promise<void> {
+  const open = await CashSession.query().whereNull('closed_at')
+  for (const session of open) {
+    session.closedAt = DateTime.now()
+    // NULL, no 0: es lo que libera el índice UNIQUE para la sesión del test.
+    session.openMarker = null
+    await session.save()
+  }
+}
+
 export function nowART(): DateTime {
   return DateTime.now().setZone(ART_TZ)
 }

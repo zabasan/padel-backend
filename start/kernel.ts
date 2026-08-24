@@ -49,4 +49,7 @@ export const middleware = router.named({
   role: () => import('#middleware/role_middleware'),
   profileComplete: () => import('#middleware/profile_complete_middleware'),
   permission: () => import('#middleware/permission_middleware'),
+  // No se registra plata sin caja abierta. Se stackea DESPUÉS de `permission`:
+  // primero se decide si el actor puede hacerlo, después si la caja lo permite.
+  cashRegister: () => import('#middleware/cash_register_middleware'),
 })

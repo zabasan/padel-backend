@@ -79,6 +79,12 @@ export type ScannedRoutes = {
     'user_audit_logs.index': { paramsTuple?: []; params?: {} }
     'reservations.audit_logs_all': { paramsTuple?: []; params?: {} }
     'commerce_audit_logs.index': { paramsTuple?: []; params?: {} }
+    'cash_register.current': { paramsTuple?: []; params?: {} }
+    'cash_register.index': { paramsTuple?: []; params?: {} }
+    'cash_register.show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'cash_register.open': { paramsTuple?: []; params?: {} }
+    'cash_register.close': { paramsTuple?: []; params?: {} }
+    'cash_register.rotate': { paramsTuple?: []; params?: {} }
   }
   GET: {
     'settings.show': { paramsTuple?: []; params?: {} }
@@ -110,6 +116,9 @@ export type ScannedRoutes = {
     'user_audit_logs.index': { paramsTuple?: []; params?: {} }
     'reservations.audit_logs_all': { paramsTuple?: []; params?: {} }
     'commerce_audit_logs.index': { paramsTuple?: []; params?: {} }
+    'cash_register.current': { paramsTuple?: []; params?: {} }
+    'cash_register.index': { paramsTuple?: []; params?: {} }
+    'cash_register.show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
   }
   HEAD: {
     'settings.show': { paramsTuple?: []; params?: {} }
@@ -141,6 +150,9 @@ export type ScannedRoutes = {
     'user_audit_logs.index': { paramsTuple?: []; params?: {} }
     'reservations.audit_logs_all': { paramsTuple?: []; params?: {} }
     'commerce_audit_logs.index': { paramsTuple?: []; params?: {} }
+    'cash_register.current': { paramsTuple?: []; params?: {} }
+    'cash_register.index': { paramsTuple?: []; params?: {} }
+    'cash_register.show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
   }
   POST: {
     'new_account.store': { paramsTuple?: []; params?: {} }
@@ -158,6 +170,9 @@ export type ScannedRoutes = {
     'users.store': { paramsTuple?: []; params?: {} }
     'users.reset_login': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'roles.store': { paramsTuple?: []; params?: {} }
+    'cash_register.open': { paramsTuple?: []; params?: {} }
+    'cash_register.close': { paramsTuple?: []; params?: {} }
+    'cash_register.rotate': { paramsTuple?: []; params?: {} }
   }
   PUT: {
     'complete_profile.store': { paramsTuple?: []; params?: {} }

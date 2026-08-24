@@ -2,7 +2,9 @@ import { test } from '@japa/runner'
 import testUtils from '@adonisjs/core/services/test_utils'
 import db from '@adonisjs/lucid/services/db'
 import Product from '#models/product'
-import { createAdmin, createProduct, createStaff } from './fixtures.js'
+import { createAdmin, createProduct, createStaff,
+  openCashSession,
+} from './fixtures.js'
 
 /**
  * Behavior of the POS: what a sale does to stock, what it refuses to do, and
@@ -32,6 +34,9 @@ const asProductPage = (r: JsonResponse) => r.body() as { data: Array<{ name: str
 
 test.group('sales — creating a sale', (group) => {
   group.each.setup(() => testUtils.db().withGlobalTransaction())
+  // La caja tiene que estar abierta: middleware.cashRegister bloquea todo movimiento
+  // de plata con 409 si no lo está. Va DESPUÉS de la transacción para revertirse con ella.
+  group.each.setup(async () => { await openCashSession() })
 
   test('a sale decrements stock and records a ledger movement', async ({ client, assert }) => {
     const admin = await createAdmin()
@@ -197,6 +202,9 @@ test.group('sales — creating a sale', (group) => {
 
 test.group('sales — cancelling a sale', (group) => {
   group.each.setup(() => testUtils.db().withGlobalTransaction())
+  // La caja tiene que estar abierta: middleware.cashRegister bloquea todo movimiento
+  // de plata con 409 si no lo está. Va DESPUÉS de la transacción para revertirse con ella.
+  group.each.setup(async () => { await openCashSession() })
 
   test('cancelling puts the stock back and leaves the sale on record', async ({
     client,
@@ -255,6 +263,9 @@ test.group('sales — cancelling a sale', (group) => {
 
 test.group('products — stock adjustments', (group) => {
   group.each.setup(() => testUtils.db().withGlobalTransaction())
+  // La caja tiene que estar abierta: middleware.cashRegister bloquea todo movimiento
+  // de plata con 409 si no lo está. Va DESPUÉS de la transacción para revertirse con ella.
+  group.each.setup(async () => { await openCashSession() })
 
   test('an "in" movement adds to stock', async ({ client, assert }) => {
     const admin = await createAdmin()
@@ -362,6 +373,9 @@ test.group('products — stock adjustments', (group) => {
 
 test.group('products — soft delete', (group) => {
   group.each.setup(() => testUtils.db().withGlobalTransaction())
+  // La caja tiene que estar abierta: middleware.cashRegister bloquea todo movimiento
+  // de plata con 409 si no lo está. Va DESPUÉS de la transacción para revertirse con ella.
+  group.each.setup(async () => { await openCashSession() })
 
   test('a deleted product disappears from the catalog but its sale survives', async ({
     client,

@@ -7,6 +7,7 @@ import {
   createExpenseCategory,
   createUserWithPermissions,
   todayISODate,
+  openCashSession,
 } from './fixtures.js'
 
 /**
@@ -38,6 +39,9 @@ function validPayload(overrides: Record<string, unknown> = {}) {
 
 test.group('expenses — sin el permiso no hay gastos', (group) => {
   group.each.setup(() => testUtils.db().withGlobalTransaction())
+  // La caja tiene que estar abierta: middleware.cashRegister bloquea todo movimiento
+  // de plata con 409 si no lo está. Va DESPUÉS de la transacción para revertirse con ella.
+  group.each.setup(async () => { await openCashSession() })
 
   test('un usuario sin `expenses` queda afuera de todas las rutas de gasto', async ({ client }) => {
     const nobody = await createUserWithPermissions()
@@ -86,6 +90,9 @@ test.group('expenses — sin el permiso no hay gastos', (group) => {
 
 test.group('expenses — cada verbo en su permiso', (group) => {
   group.each.setup(() => testUtils.db().withGlobalTransaction())
+  // La caja tiene que estar abierta: middleware.cashRegister bloquea todo movimiento
+  // de plata con 409 si no lo está. Va DESPUÉS de la transacción para revertirse con ella.
+  group.each.setup(async () => { await openCashSession() })
 
   test('`expenses.view` lee pero NO carga', async ({ client }) => {
     const reader = await createUserWithPermissions({ expenses: { view: true } })
@@ -142,6 +149,9 @@ test.group('expenses — cada verbo en su permiso', (group) => {
 
 test.group('expenses — desglose de pago', (group) => {
   group.each.setup(() => testUtils.db().withGlobalTransaction())
+  // La caja tiene que estar abierta: middleware.cashRegister bloquea todo movimiento
+  // de plata con 409 si no lo está. Va DESPUÉS de la transacción para revertirse con ella.
+  group.each.setup(async () => { await openCashSession() })
 
   // El caso abrumadoramente común: se pagó del cajón. Rechazarlo por un campo sin tocar
   // sería pelearle al usuario por nada. Misma decisión que sales_controller.store.
@@ -202,6 +212,9 @@ test.group('expenses — desglose de pago', (group) => {
 
 test.group('expenses — anular, no borrar', (group) => {
   group.each.setup(() => testUtils.db().withGlobalTransaction())
+  // La caja tiene que estar abierta: middleware.cashRegister bloquea todo movimiento
+  // de plata con 409 si no lo está. Va DESPUÉS de la transacción para revertirse con ella.
+  group.each.setup(async () => { await openCashSession() })
 
   test('DELETE deja la fila con status cancelled y quién la anuló', async ({ client, assert }) => {
     const actor = await createUserWithPermissions({ expenses: ALL })
@@ -243,6 +256,9 @@ test.group('expenses — anular, no borrar', (group) => {
 
 test.group('expenses — categorías', (group) => {
   group.each.setup(() => testUtils.db().withGlobalTransaction())
+  // La caja tiene que estar abierta: middleware.cashRegister bloquea todo movimiento
+  // de plata con 409 si no lo está. Va DESPUÉS de la transacción para revertirse con ella.
+  group.each.setup(async () => { await openCashSession() })
 
   test('no se puede asignar una categoría retirada', async ({ client }) => {
     const actor = await createUserWithPermissions({ expenses: ALL })
@@ -292,6 +308,9 @@ test.group('expenses — categorías', (group) => {
 
 test.group('expenses — auditoría', (group) => {
   group.each.setup(() => testUtils.db().withGlobalTransaction())
+  // La caja tiene que estar abierta: middleware.cashRegister bloquea todo movimiento
+  // de plata con 409 si no lo está. Va DESPUÉS de la transacción para revertirse con ella.
+  group.each.setup(async () => { await openCashSession() })
 
   async function logsFor(entityType: string, entityId: number) {
     return CommerceAuditLog.query()

@@ -907,4 +907,76 @@ export interface Registry {
       errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/commerce_audit_logs_controller').default['index']>>>
     }
   }
+  'cash_register.current': {
+    methods: ["GET","HEAD"]
+    pattern: '/api/v1/cash-register/current'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/cash_register_controller').default['current']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/cash_register_controller').default['current']>>>
+    }
+  }
+  'cash_register.index': {
+    methods: ["GET","HEAD"]
+    pattern: '/api/v1/cash-register/sessions'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/cash_register_controller').default['index']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/cash_register_controller').default['index']>>>
+    }
+  }
+  'cash_register.show': {
+    methods: ["GET","HEAD"]
+    pattern: '/api/v1/cash-register/sessions/:id'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/cash_register_controller').default['show']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/cash_register_controller').default['show']>>>
+    }
+  }
+  'cash_register.open': {
+    methods: ["POST"]
+    pattern: '/api/v1/cash-register/open'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/cash_register_controller').default['open']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/cash_register_controller').default['open']>>>
+    }
+  }
+  'cash_register.close': {
+    methods: ["POST"]
+    pattern: '/api/v1/cash-register/close'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/cash_register_controller').default['close']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/cash_register_controller').default['close']>>>
+    }
+  }
+  'cash_register.rotate': {
+    methods: ["POST"]
+    pattern: '/api/v1/cash-register/rotate'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/cash_register_controller').default['rotate']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/cash_register_controller').default['rotate']>>>
+    }
+  }
 }

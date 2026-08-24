@@ -143,6 +143,15 @@ export default class Reservation extends BaseModel {
   @hasMany(() => ReservationHiddenDate)
   declare hiddenDates: HasMany<typeof ReservationHiddenDate>
 
-  @hasMany(() => ReservationPayment)
+  // Solo los pagos VIGENTES. Un pago revertido conserva su fila (ver la migración
+  // 1784000000001), así que el filtro va acá, en la relación, y no en cada preload:
+  // hay siete `preload('payments')` y dos `load('payments')` en el controller, y el
+  // estado de pago por ocurrencia y el carry balance de las fijas se calculan sobre
+  // esta colección. Un preload nuevo hereda el filtro sin que nadie se acuerde.
+  // Para leer los revertidos (el cierre de caja lo hace) se consulta
+  // ReservationPayment directo.
+  @hasMany(() => ReservationPayment, {
+    onQuery: (query) => query.whereNull('reverted_at'),
+  })
   declare payments: HasMany<typeof ReservationPayment>
 }

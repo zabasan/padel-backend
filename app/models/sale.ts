@@ -46,6 +46,10 @@ export default class Sale extends BaseModel {
   @column.dateTime({ autoCreate: true, autoUpdate: true })
   declare updatedAt: DateTime | null
 
+  // Turno de caja en que se vendió, y en que se anuló. Ver la migración 1784000000005.
+  @column() declare cashSessionId: number | null
+  @column() declare cancelledInCashSessionId: number | null
+
   @hasMany(() => SaleItem)
   declare items: HasMany<typeof SaleItem>
 
@@ -54,4 +58,10 @@ export default class Sale extends BaseModel {
 
   @belongsTo(() => User, { foreignKey: 'customerId' })
   declare customer: BelongsTo<typeof User>
+
+  // La columna cancelled_by existía desde el principio pero sin relación; Expense sí
+  // tenía su `canceller`. El cierre de caja necesita el nombre de quien anuló, porque
+  // una anulación saca plata del cajón y el turno tiene que poder decir quién la sacó.
+  @belongsTo(() => User, { foreignKey: 'cancelledBy' })
+  declare canceller: BelongsTo<typeof User>
 }

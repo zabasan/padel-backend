@@ -2,6 +2,12 @@ import type { HttpContext } from '@adonisjs/core/http'
 import Setting from '#models/setting'
 import ProfessorPriceHistory from '#models/professor_price_history'
 import { DateTime } from 'luxon'
+import {
+  CASH_SHIFTS_KEY,
+  parseShifts,
+  serializeShifts,
+  validateShifts,
+} from '#services/cash_shifts'
 
 export default class SettingsController {
   async show({ response }: HttpContext) {
@@ -24,6 +30,10 @@ export default class SettingsController {
       professorPriceIndividual: result['professorPriceIndividual'] != null ? Number(result['professorPriceIndividual']) : 12000,
       professorPriceGroup: result['professorPriceGroup'] != null ? Number(result['professorPriceGroup']) : 15000,
       professorPriceIndividualWeekend: result['professorPriceIndividualWeekend'] != null ? Number(result['professorPriceIndividualWeekend']) : 15000,
+      // Siempre parseado, nunca el string crudo: esta ruta es pública y la consume
+      // SettingsContext, que necesita los límites del turno para pintar el estado de
+      // la caja sin un fetch extra.
+      cashShifts: parseShifts(result[CASH_SHIFTS_KEY]),
     })
   }
 
@@ -32,13 +42,27 @@ export default class SettingsController {
       appTitle, appLogo, colorPalette, contactMessage, complexPhone,
       defaultDepositPercentage, recurringPromoEnabled, recurringPromoGames, recurringPromoFreeGames,
       professorStartHour, professorEndHour, professorPadelPrice,
-      professorPriceIndividual, professorPriceGroup, professorPriceIndividualWeekend
+      professorPriceIndividual, professorPriceGroup, professorPriceIndividualWeekend,
+      cashShifts
     } = request.only([
       'appTitle', 'appLogo', 'colorPalette', 'contactMessage', 'complexPhone',
       'defaultDepositPercentage', 'recurringPromoEnabled', 'recurringPromoGames', 'recurringPromoFreeGames',
       'professorStartHour', 'professorEndHour', 'professorPadelPrice',
-      'professorPriceIndividual', 'professorPriceGroup', 'professorPriceIndividualWeekend'
+      'professorPriceIndividual', 'professorPriceGroup', 'professorPriceIndividualWeekend',
+      'cashShifts'
     ])
+
+    // Los turnos se validan ANTES de escribir cualquier setting: si la lista viene con
+    // turnos solapados, la petición se rechaza entera en lugar de dejar la mitad de la
+    // configuración guardada y la caja sin poder resolver qué turno corre.
+    let cashShiftsToSave: string | null = null
+    if (cashShifts !== undefined) {
+      const validation = validateShifts(cashShifts)
+      if (!validation.ok) {
+        return response.badRequest({ message: validation.error })
+      }
+      cashShiftsToSave = serializeShifts(validation.shifts)
+    }
 
     await Setting.updateOrCreate({ key: 'appTitle' }, { key: 'appTitle', value: appTitle ?? 'Padel Complex' })
     await Setting.updateOrCreate({ key: 'appLogo' }, { key: 'appLogo', value: appLogo ?? null })
@@ -55,6 +79,12 @@ export default class SettingsController {
     await Setting.updateOrCreate({ key: 'professorPriceIndividual' }, { key: 'professorPriceIndividual', value: professorPriceIndividual != null && professorPriceIndividual !== '' ? String(professorPriceIndividual) : '12000' })
     await Setting.updateOrCreate({ key: 'professorPriceGroup' }, { key: 'professorPriceGroup', value: professorPriceGroup != null && professorPriceGroup !== '' ? String(professorPriceGroup) : '15000' })
     await Setting.updateOrCreate({ key: 'professorPriceIndividualWeekend' }, { key: 'professorPriceIndividualWeekend', value: professorPriceIndividualWeekend != null && professorPriceIndividualWeekend !== '' ? String(professorPriceIndividualWeekend) : '15000' })
+
+    if (cashShiftsToSave !== null) {
+      await Setting.updateOrCreate({ key: CASH_SHIFTS_KEY }, { key: CASH_SHIFTS_KEY, value: cashShiftsToSave })
+    }
+    const savedCashShiftsRow = cashShiftsToSave === null ? await Setting.find(CASH_SHIFTS_KEY) : null
+    const savedCashShifts = parseShifts(cashShiftsToSave ?? savedCashShiftsRow?.value ?? null)
 
     // Snapshot professor prices into history whenever any of them change
     const newIndividual = professorPriceIndividual != null && professorPriceIndividual !== '' ? Number(professorPriceIndividual) : 12000
@@ -92,6 +122,9 @@ export default class SettingsController {
       professorPriceIndividual: professorPriceIndividual != null && professorPriceIndividual !== '' ? Number(professorPriceIndividual) : 12000,
       professorPriceGroup: professorPriceGroup != null && professorPriceGroup !== '' ? Number(professorPriceGroup) : 15000,
       professorPriceIndividualWeekend: professorPriceIndividualWeekend != null && professorPriceIndividualWeekend !== '' ? Number(professorPriceIndividualWeekend) : 15000,
+      // Los ya normalizados y ordenados, no lo que mandó el cliente. Si no vinieron en
+      // la petición, se releen los guardados en lugar de mentir con el default.
+      cashShifts: savedCashShifts,
     })
   }
 }

@@ -67,6 +67,11 @@ export default class Expense extends BaseModel {
   @column.dateTime({ autoCreate: true, autoUpdate: true })
   declare updatedAt: DateTime | null
 
+  // Turno de caja en que salió la plata, y en que volvió si se anuló.
+  // Ver la migración 1784000000005.
+  @column() declare cashSessionId: number | null
+  @column() declare cancelledInCashSessionId: number | null
+
   @belongsTo(() => ExpenseCategory, { foreignKey: 'categoryId' })
   declare category: BelongsTo<typeof ExpenseCategory>
 

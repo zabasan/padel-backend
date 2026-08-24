@@ -3,6 +3,7 @@ import Reservation from '#models/reservation'
 import ReservationHiddenDate from '#models/reservation_hidden_date'
 import ReservationAuditLog from '#models/reservation_audit_log'
 import ReservationPayment from '#models/reservation_payment'
+import { currentCashSessionId } from '#services/cash_register'
 import Court from '#models/court'
 import CourtPriceRange from '#models/court_price_range'
 import CourtPriceHistory from '#models/court_price_history'
@@ -1290,7 +1291,8 @@ export default class ReservationsController {
     return response.ok(obj)
   }
 
-  async payDeposit({ params, request, auth, response }: HttpContext) {
+  async payDeposit(ctx: HttpContext) {
+    const { params, request, auth, response } = ctx
     const user = auth.user!
     // Acceso por permiso en la ruta (reservation_management / payments), no por nombre de rol.
 
@@ -1326,6 +1328,10 @@ export default class ReservationsController {
     // Record payment breakdown
     await ReservationPayment.create({
       reservationId: reservation.id,
+      // El turno de caja en que entró la plata. middleware.cashRegister ya garantizó que
+      // hay una sesión abierta; esto la estampa en la fila para que el arqueo no dependa
+      // de comparar timestamps. Ver la migración 1784000000005.
+      cashSessionId: await currentCashSessionId(ctx),
       type: 'deposit',
       efectivo,
       transferencia,
@@ -1347,7 +1353,8 @@ export default class ReservationsController {
     return response.ok(reservation)
   }
 
-  async payTotal({ params, request, auth, response }: HttpContext) {
+  async payTotal(ctx: HttpContext) {
+    const { params, request, auth, response } = ctx
     const user = auth.user!
     // Acceso por permiso en la ruta (reservation_management / payments), no por nombre de rol.
 
@@ -1401,10 +1408,13 @@ export default class ReservationsController {
 
     // Already-paid guard: per occurrence for recurring, per series otherwise.
     if (reservation.isRecurring) {
+      // whereNull('reverted_at'): si el pago de este turno se revirtió, la ocurrencia
+      // vuelve a estar impaga y hay que poder cobrarla de nuevo.
       const existing = await ReservationPayment.query()
         .where('reservation_id', reservation.id)
         .where('type', 'total')
         .where('occurrence_date', occurrenceDate!)
+        .whereNull('reverted_at')
         .first()
       if (existing) return response.badRequest({ message: 'El pago de este turno ya fue registrado' })
     } else if (reservation.totalPaid) {
@@ -1467,6 +1477,7 @@ export default class ReservationsController {
     // Record payment breakdown
     await ReservationPayment.create({
       reservationId: reservation.id,
+      cashSessionId: await currentCashSessionId(ctx),
       type: 'total',
       efectivo,
       transferencia,
@@ -1573,7 +1584,8 @@ export default class ReservationsController {
     return response.ok(reservation)
   }
 
-  async revertPayment({ params, auth, response }: HttpContext) {
+  async revertPayment(ctx: HttpContext) {
+    const { params, auth, response } = ctx
     // Acceso: `payments.erase` en la ruta.
     const user = auth.user!
 
@@ -1582,6 +1594,12 @@ export default class ReservationsController {
 
     if (payment.reservationId !== reservation.id) {
       return response.badRequest({ message: 'El pago no pertenece a esta reserva' })
+    }
+
+    // Revertir dos veces descontaría totalPaidCount dos veces por un solo pago, y le
+    // cargaría al turno actual una salida de plata que ya salió.
+    if (payment.revertedAt) {
+      return response.badRequest({ message: 'El pago ya fue revertido' })
     }
 
     const auditOld = JSON.stringify({
@@ -1593,7 +1611,14 @@ export default class ReservationsController {
       occurrenceDate: payment.occurrenceDate ?? undefined,
     })
 
-    await payment.delete()
+    // Se anula, no se borra: la fila es lo que le permite al cierre de caja imputar la
+    // salida de plata al turno en que se revirtió.
+    payment.revertedAt = DateTime.now()
+    payment.revertedBy = user.id
+    // El turno en que SALE la plata, que no es el turno en que entró. De ahí que sean
+    // dos columnas distintas y no una.
+    payment.revertedInCashSessionId = await currentCashSessionId(ctx)
+    await payment.save()
 
     if (payment.type === 'deposit') {
       reservation.depositPaid = false
@@ -1619,12 +1644,17 @@ export default class ReservationsController {
     return response.ok(reservation)
   }
 
-  async revertAllPayments({ params, auth, response }: HttpContext) {
+  async revertAllPayments(ctx: HttpContext) {
+    const { params, auth, response } = ctx
     // Acceso: `payments.erase` en la ruta.
     const user = auth.user!
 
     const reservation = await Reservation.findOrFail(params.id)
-    const payments = await ReservationPayment.query().where('reservation_id', reservation.id)
+    // Solo los vigentes: los ya revertidos no se vuelven a revertir ni entran en el
+    // snapshot de auditoría, que si no repetiría pagos ya dados de baja antes.
+    const payments = await ReservationPayment.query()
+      .where('reservation_id', reservation.id)
+      .whereNull('reverted_at')
 
     if (payments.length === 0) return response.badRequest({ message: 'No hay pagos registrados para esta reserva' })
 
@@ -1639,7 +1669,14 @@ export default class ReservationsController {
       }))
     )
 
-    await ReservationPayment.query().where('reservation_id', reservation.id).delete()
+    await ReservationPayment.query()
+      .where('reservation_id', reservation.id)
+      .whereNull('reverted_at')
+      .update({
+        reverted_at: DateTime.now().toSQL({ includeOffset: false }),
+        reverted_by: user.id,
+        reverted_in_cash_session_id: await currentCashSessionId(ctx),
+      })
 
     reservation.depositPaid = false
     reservation.depositPaidAt = null

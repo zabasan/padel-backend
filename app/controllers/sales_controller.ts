@@ -1,4 +1,5 @@
 import type { HttpContext } from '@adonisjs/core/http'
+import { currentCashSessionId } from '#services/cash_register'
 import db from '@adonisjs/lucid/services/db'
 import { DateTime } from 'luxon'
 import vine from '@vinejs/vine'
@@ -100,7 +101,8 @@ export default class SalesController {
    * in a stable id order, so two registers ringing up the last unit of the same
    * item serialise instead of both succeeding.
    */
-  async store({ request, response, auth }: HttpContext) {
+  async store(ctx: HttpContext) {
+    const { request, response, auth } = ctx
     const data = await request.validateUsing(saleValidator)
 
     const split = {
@@ -166,6 +168,9 @@ export default class SalesController {
         created.merge({
           userId: auth.user!.id,
           customerId: data.customerId ?? null,
+          // Turno de caja en que entró la plata. middleware.cashRegister ya garantizó
+          // que hay una sesión abierta. Ver la migración 1784000000005.
+          cashSessionId: await currentCashSessionId(ctx),
           total,
           efectivo: split.efectivo,
           transferencia: split.transferencia,
@@ -238,7 +243,8 @@ export default class SalesController {
    * `return` movements. A voided sale that leaves no trace is how a register
    * loses money quietly.
    */
-  async destroy({ params, response, auth }: HttpContext) {
+  async destroy(ctx: HttpContext) {
+    const { params, response, auth } = ctx
     const sale = await Sale.query().where('id', params.id).preload('items').firstOrFail()
 
     if (sale.status === 'cancelled') {
@@ -266,6 +272,8 @@ export default class SalesController {
       sale.status = 'cancelled'
       sale.cancelledBy = auth.user!.id
       sale.cancelledAt = DateTime.now()
+      // La devolución sale del turno ACTUAL, que puede no ser el de la venta.
+      sale.cancelledInCashSessionId = await currentCashSessionId(ctx)
       await sale.save()
 
       await logCommerce(

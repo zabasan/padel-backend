@@ -43,6 +43,12 @@ export const MODULES: ModuleDefinition[] = [
   // el gasto es lo único que baja el resultado del período. Quien atiende el kiosco puede
   // necesitar `sales.create` sin poder cargar ni ver el gasto de un proveedor.
   { name: 'expenses', visibleName: 'Gastos' },
+  // La caja: abrirla, cerrarla y ver el arqueo del turno. Tres verbos y no cuatro —
+  // `view` es ver el turno y el historial, `create` es ABRIR y `update` es CERRAR.
+  // Sin `erase`: un cierre de caja es un hecho, no se borra. Abrir y cerrar están
+  // separados a propósito para que el día que quieran que solo el encargado cierre
+  // sea un click en el ABM de Roles y no una migración.
+  { name: 'cash_register', visibleName: 'Caja' },
 ]
 
 export const MODULE_NAMES: string[] = MODULES.map((m) => m.name)
@@ -90,6 +96,7 @@ export const ROLE_PERMISSION_MATRIX: Record<SeededRole, Record<string, ModulePer
     products: p('vcue'),
     sales: p('vcue'),
     expenses: p('vcue'),
+    cash_register: p('vcu'),
   },
   // admin minus `roles` and `user_permissions` — see D6/D7.
   supervisor: {
@@ -111,6 +118,7 @@ export const ROLE_PERMISSION_MATRIX: Record<SeededRole, Record<string, ModulePer
     // el día uno los tiene solo admin. El módulo existe aparte justamente para que
     // habilitárselo al supervisor sea un click en el ABM de Roles y no una migración.
     expenses: p(''),
+    cash_register: p('vcu'),
   },
   worker: {
     courts: p('vcue'),
@@ -131,6 +139,10 @@ export const ROLE_PERMISSION_MATRIX: Record<SeededRole, Record<string, ModulePer
     // período, así que se concede explícitamente desde el ABM de Roles cuando el complejo
     // lo decida — no se asume acá.
     expenses: p(''),
+    // Único módulo nuevo que arranca ABIERTO para worker: el pedido es explícitamente
+    // que los chicos del mostrador abran y cierren la caja de su turno. Sin esto la
+    // función no existe para quien la va a usar.
+    cash_register: p('vcu'),
   },
   // Customers and professors hold every verb on `reservations` on purpose:
   // ownership ("only your own") is enforced in the controller, not in this grid.
@@ -149,6 +161,7 @@ export const ROLE_PERMISSION_MATRIX: Record<SeededRole, Record<string, ModulePer
     products: p(''),
     sales: p(''),
     expenses: p(''),
+    cash_register: p(''),
   },
   professor: {
     courts: p('v'),
@@ -166,5 +179,6 @@ export const ROLE_PERMISSION_MATRIX: Record<SeededRole, Record<string, ModulePer
     products: p(''),
     sales: p(''),
     expenses: p(''),
+    cash_register: p(''),
   },
 }

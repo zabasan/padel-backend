@@ -66,6 +66,7 @@ export default class StatsController {
             OR (r.is_recurring = 1 AND EXISTS (
               SELECT 1 FROM reservation_payments rpt
               WHERE rpt.reservation_id = r.id
+                AND rpt.reverted_at IS NULL
                 AND rpt.type = 'total'
                 AND (
                   (rp.occurrence_date IS NOT NULL AND rpt.occurrence_date = rp.occurrence_date)
@@ -83,6 +84,7 @@ export default class StatsController {
           OR (r.is_recurring = 1 AND EXISTS (
             SELECT 1 FROM reservation_payments rp2
             WHERE rp2.reservation_id = r.id
+              AND rp2.reverted_at IS NULL
               AND (
                 (rp2.occurrence_date IS NOT NULL AND rp2.occurrence_date >= ? AND rp2.occurrence_date <= ?)
                 OR (rp2.occurrence_date IS NULL AND r.start_time >= ? AND r.start_time <= ?)
@@ -91,6 +93,7 @@ export default class StatsController {
         )
       LEFT JOIN reservation_payments rp
         ON rp.reservation_id = r.id
+        AND rp.reverted_at IS NULL
         AND (
           (r.is_recurring = 0)
           OR (r.is_recurring = 1 AND rp.occurrence_date IS NOT NULL AND rp.occurrence_date >= ? AND rp.occurrence_date <= ?)
@@ -209,6 +212,7 @@ export default class StatsController {
       FROM reservation_payments rp
       INNER JOIN reservations r ON r.id = rp.reservation_id
       WHERE r.status != 'cancelled'
+        AND rp.reverted_at IS NULL
         AND (
           (r.is_recurring = 0 AND r.start_time >= ? AND r.start_time <= ?)
           OR (r.is_recurring = 1 AND rp.occurrence_date IS NOT NULL AND rp.occurrence_date >= ? AND rp.occurrence_date <= ?)
@@ -239,6 +243,7 @@ export default class StatsController {
       FROM reservation_payments rp
       INNER JOIN reservations r ON r.id = rp.reservation_id
       WHERE r.status != 'cancelled'
+        AND rp.reverted_at IS NULL
         AND (
           (r.is_recurring = 0 AND r.start_time >= ? AND r.start_time <= ?)
           OR (r.is_recurring = 1 AND rp.occurrence_date IS NOT NULL AND rp.occurrence_date >= ? AND rp.occurrence_date <= ?)
@@ -249,6 +254,7 @@ export default class StatsController {
           OR (r.is_recurring = 1 AND EXISTS (
             SELECT 1 FROM reservation_payments rpt
             WHERE rpt.reservation_id = r.id
+              AND rpt.reverted_at IS NULL
               AND rpt.type = 'total'
               AND (
                 (rp.occurrence_date IS NOT NULL AND rpt.occurrence_date = rp.occurrence_date)

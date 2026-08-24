@@ -1,4 +1,5 @@
 import type { HttpContext } from '@adonisjs/core/http'
+import { currentCashSessionId } from '#services/cash_register'
 import { DateTime } from 'luxon'
 import vine from '@vinejs/vine'
 import Expense from '#models/expense'
@@ -71,7 +72,8 @@ export default class ExpensesController {
     return response.ok(expense)
   }
 
-  async store({ request, response, auth }: HttpContext) {
+  async store(ctx: HttpContext) {
+    const { request, response, auth } = ctx
     const data = await request.validateUsing(expenseValidator)
 
     try {
@@ -81,6 +83,10 @@ export default class ExpensesController {
 
       const expense = await Expense.create({
         categoryId,
+        // Turno de caja en que SALIÓ la plata. Ojo: es el turno del momento de la carga,
+        // no el de `expenseDate` — la factura de la luz de ayer cargada hoy sale del
+        // cajón de hoy. Ver la migración 1784000000005.
+        cashSessionId: await currentCashSessionId(ctx),
         description: data.description,
         supplier: data.supplier ?? null,
         amount,
@@ -177,7 +183,8 @@ export default class ExpensesController {
    * desaparece sin rastro es exactamente cómo una caja se descuadra en silencio — misma
    * regla que una venta anulada.
    */
-  async destroy({ params, response, auth }: HttpContext) {
+  async destroy(ctx: HttpContext) {
+    const { params, response, auth } = ctx
     const expense = await Expense.query().where('id', params.id).firstOrFail()
 
     if (expense.status === 'cancelled') {
@@ -187,6 +194,8 @@ export default class ExpensesController {
     expense.status = 'cancelled'
     expense.cancelledBy = auth.user!.id
     expense.cancelledAt = DateTime.now()
+    // La plata vuelve al cajón en el turno ACTUAL, no en el de la carga original.
+    expense.cancelledInCashSessionId = await currentCashSessionId(ctx)
     await expense.save()
 
     await logCommerce(

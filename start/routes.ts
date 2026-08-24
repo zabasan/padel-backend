@@ -87,9 +87,11 @@ router
           router
             .patch('reservations/:id/pay-deposit', [controllers.Reservations, 'payDeposit'])
             .use(middleware.permission({ module: 'payments', action: 'create' }))
+            .use(middleware.cashRegister())
           router
             .patch('reservations/:id/pay-total', [controllers.Reservations, 'payTotal'])
             .use(middleware.permission({ module: 'payments', action: 'create' }))
+            .use(middleware.cashRegister())
           router
             .get('reservations/:id/audit', [controllers.Reservations, 'auditLogs'])
             .use(middleware.permission({ module: 'reservation_management', action: 'view' }))
@@ -106,9 +108,12 @@ router
               'revertPayment',
             ])
             .use(middleware.permission({ module: 'payments', action: 'erase' }))
+            // Devolver un pago saca plata del cajón AHORA, no cuando se cobró.
+            .use(middleware.cashRegister())
           router
             .delete('reservations/:id/payments', [controllers.Reservations, 'revertAllPayments'])
             .use(middleware.permission({ module: 'payments', action: 'erase' }))
+            .use(middleware.cashRegister())
         })
 
         // Commerce — catálogo/stock (`products`) y caja del kiosco (`sales`).
@@ -179,9 +184,12 @@ router
           router
             .post('sales', [controllers.Sales, 'store'])
             .use(middleware.permission({ module: 'sales', action: 'create' }))
+            .use(middleware.cashRegister())
           router
             .delete('sales/:id', [controllers.Sales, 'destroy'])
             .use(middleware.permission({ module: 'sales', action: 'erase' }))
+            // Anular devuelve plata al cliente AHORA, no cuando se vendió.
+            .use(middleware.cashRegister())
         })
 
         // Gastos de las instalaciones (servicios, limpieza, mantenimiento, insumos).
@@ -217,6 +225,7 @@ router
           router
             .post('expenses', [controllers.Expenses, 'store'])
             .use(middleware.permission({ module: 'expenses', action: 'create' }))
+            .use(middleware.cashRegister())
           router
             .put('expenses/:id', [controllers.Expenses, 'update'])
             .use(middleware.permission({ module: 'expenses', action: 'update' }))
@@ -224,6 +233,7 @@ router
           router
             .delete('expenses/:id', [controllers.Expenses, 'destroy'])
             .use(middleware.permission({ module: 'expenses', action: 'erase' }))
+            .use(middleware.cashRegister())
         })
 
         // Users management
@@ -319,6 +329,36 @@ router
           router
             .get('audit/commerce', [controllers.CommerceAuditLogs, 'index'])
             .use(middleware.permission({ module: 'audit', action: 'view' }))
+        })
+
+        // Caja del complejo: una sola, secuencial. Se abre al empezar el turno y se
+        // cierra al terminarlo; mientras está cerrada, los ocho endpoints que mueven
+        // plata devuelven 409 (ver middleware.cashRegister más arriba).
+        //
+        // Tres verbos y no cuatro: `view` es ver el turno y el historial, `create` es
+        // ABRIR y `update` es CERRAR. Sin `erase` — un cierre de caja es un hecho.
+        router.group(() => {
+          router
+            .get('cash-register/current', [controllers.CashRegister, 'current'])
+            .use(middleware.permission({ module: 'cash_register', action: 'view' }))
+          router
+            .get('cash-register/sessions', [controllers.CashRegister, 'index'])
+            .use(middleware.permission({ module: 'cash_register', action: 'view' }))
+          router
+            .get('cash-register/sessions/:id', [controllers.CashRegister, 'show'])
+            .use(middleware.permission({ module: 'cash_register', action: 'view' }))
+          router
+            .post('cash-register/open', [controllers.CashRegister, 'open'])
+            .use(middleware.permission({ module: 'cash_register', action: 'create' }))
+          router
+            .post('cash-register/close', [controllers.CashRegister, 'close'])
+            .use(middleware.permission({ module: 'cash_register', action: 'update' }))
+          // Cierra el turno vencido y abre el que corre, en UNA transacción. Necesita
+          // los dos permisos: es un cierre y una apertura, no una operación aparte.
+          router
+            .post('cash-register/rotate', [controllers.CashRegister, 'rotate'])
+            .use(middleware.permission({ module: 'cash_register', action: 'update' }))
+            .use(middleware.permission({ module: 'cash_register', action: 'create' }))
         })
       })
       .use(middleware.auth())

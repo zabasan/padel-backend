@@ -32,6 +32,57 @@ export class AuthAccessTokenSchema extends BaseModel {
   declare updatedAt: DateTime | null
 }
 
+export class CashSessionSchema extends BaseModel {
+  static $columns = ['businessDate', 'closedAt', 'closedBy', 'countedEfectivo', 'createdAt', 'expectedCloseAt', 'id', 'inEfectivo', 'inPostnet', 'inTransferencia', 'movementsCount', 'notes', 'openMarker', 'openedAt', 'openedBy', 'openingEfectivo', 'outEfectivo', 'outPostnet', 'outTransferencia', 'shiftEndMinute', 'shiftName', 'shiftStartMinute', 'updatedAt'] as const
+  $columns = CashSessionSchema.$columns
+  @column.date()
+  declare businessDate: DateTime
+  @column.dateTime()
+  declare closedAt: DateTime | null
+  @column()
+  declare closedBy: number | null
+  @column()
+  declare countedEfectivo: string | null
+  @column.dateTime({ autoCreate: true })
+  declare createdAt: DateTime
+  @column.dateTime()
+  declare expectedCloseAt: DateTime
+  @column({ isPrimary: true })
+  declare id: number
+  @column()
+  declare inEfectivo: string
+  @column()
+  declare inPostnet: string
+  @column()
+  declare inTransferencia: string
+  @column()
+  declare movementsCount: number
+  @column()
+  declare notes: string | null
+  @column()
+  declare openMarker: boolean | null
+  @column.dateTime()
+  declare openedAt: DateTime
+  @column()
+  declare openedBy: number
+  @column()
+  declare openingEfectivo: string
+  @column()
+  declare outEfectivo: string
+  @column()
+  declare outPostnet: string
+  @column()
+  declare outTransferencia: string
+  @column()
+  declare shiftEndMinute: number
+  @column()
+  declare shiftName: string
+  @column()
+  declare shiftStartMinute: number
+  @column.dateTime({ autoCreate: true, autoUpdate: true })
+  declare updatedAt: DateTime | null
+}
+
 export class CommerceAuditLogSchema extends BaseModel {
   static $columns = ['action', 'createdAt', 'entityId', 'entityLabel', 'entityType', 'field', 'id', 'newValue', 'oldValue', 'performedBy'] as const
   $columns = CommerceAuditLogSchema.$columns
@@ -152,7 +203,7 @@ export class ExpenseCategorySchema extends BaseModel {
 }
 
 export class ExpenseSchema extends BaseModel {
-  static $columns = ['amount', 'cancelledAt', 'cancelledBy', 'categoryId', 'createdAt', 'createdBy', 'description', 'efectivo', 'expenseDate', 'id', 'notes', 'postnet', 'status', 'supplier', 'transferencia', 'updatedAt'] as const
+  static $columns = ['amount', 'cancelledAt', 'cancelledBy', 'cancelledInCashSessionId', 'cashSessionId', 'categoryId', 'createdAt', 'createdBy', 'description', 'efectivo', 'expenseDate', 'id', 'notes', 'postnet', 'status', 'supplier', 'transferencia', 'updatedAt'] as const
   $columns = ExpenseSchema.$columns
   @column()
   declare amount: string
@@ -160,6 +211,10 @@ export class ExpenseSchema extends BaseModel {
   declare cancelledAt: DateTime | null
   @column()
   declare cancelledBy: number | null
+  @column()
+  declare cancelledInCashSessionId: number | null
+  @column()
+  declare cashSessionId: number | null
   @column()
   declare categoryId: number | null
   @column.dateTime({ autoCreate: true })
@@ -303,8 +358,10 @@ export class ReservationHiddenDateSchema extends BaseModel {
 }
 
 export class ReservationPaymentSchema extends BaseModel {
-  static $columns = ['createdAt', 'efectivo', 'expectedAmount', 'id', 'occurrenceDate', 'paidBy', 'postnet', 'receipt', 'reservationId', 'total', 'transferencia', 'type'] as const
+  static $columns = ['cashSessionId', 'createdAt', 'efectivo', 'expectedAmount', 'id', 'occurrenceDate', 'paidBy', 'postnet', 'receipt', 'reservationId', 'revertedAt', 'revertedBy', 'revertedInCashSessionId', 'total', 'transferencia', 'type'] as const
   $columns = ReservationPaymentSchema.$columns
+  @column()
+  declare cashSessionId: number | null
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime
   @column()
@@ -323,6 +380,12 @@ export class ReservationPaymentSchema extends BaseModel {
   declare receipt: string | null
   @column()
   declare reservationId: number
+  @column.dateTime()
+  declare revertedAt: DateTime | null
+  @column()
+  declare revertedBy: number | null
+  @column()
+  declare revertedInCashSessionId: number | null
   @column()
   declare total: string
   @column()
@@ -474,12 +537,16 @@ export class SaleItemSchema extends BaseModel {
 }
 
 export class SaleSchema extends BaseModel {
-  static $columns = ['cancelledAt', 'cancelledBy', 'createdAt', 'customerId', 'efectivo', 'id', 'notes', 'postnet', 'status', 'total', 'transferencia', 'updatedAt', 'userId'] as const
+  static $columns = ['cancelledAt', 'cancelledBy', 'cancelledInCashSessionId', 'cashSessionId', 'createdAt', 'customerId', 'efectivo', 'id', 'notes', 'postnet', 'status', 'total', 'transferencia', 'updatedAt', 'userId'] as const
   $columns = SaleSchema.$columns
   @column.dateTime()
   declare cancelledAt: DateTime | null
   @column()
   declare cancelledBy: number | null
+  @column()
+  declare cancelledInCashSessionId: number | null
+  @column()
+  declare cashSessionId: number | null
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime
   @column()

@@ -115,4 +115,12 @@ export interface ApiDefinition {
   commerceAuditLogs: {
     index: typeof routes['commerce_audit_logs.index']
   }
+  cashRegister: {
+    current: typeof routes['cash_register.current']
+    index: typeof routes['cash_register.index']
+    show: typeof routes['cash_register.show']
+    open: typeof routes['cash_register.open']
+    close: typeof routes['cash_register.close']
+    rotate: typeof routes['cash_register.rotate']
+  }
 }

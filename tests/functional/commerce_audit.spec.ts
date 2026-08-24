@@ -1,7 +1,9 @@
 import { test } from '@japa/runner'
 import testUtils from '@adonisjs/core/services/test_utils'
 import db from '@adonisjs/lucid/services/db'
-import { createAdmin, createProduct, createUserWithPermissions } from './fixtures.js'
+import { createAdmin, createProduct, createUserWithPermissions,
+  openCashSession,
+} from './fixtures.js'
 
 /**
  * "Toda carga de artículos y ventas tiene que estar auditada" — this file is that requirement
@@ -22,6 +24,9 @@ async function logsFor(entityType: string, entityId: number) {
 
 test.group('commerce audit — products', (group) => {
   group.each.setup(() => testUtils.db().withGlobalTransaction())
+  // La caja tiene que estar abierta: middleware.cashRegister bloquea todo movimiento
+  // de plata con 409 si no lo está. Va DESPUÉS de la transacción para revertirse con ella.
+  group.each.setup(async () => { await openCashSession() })
 
   test('creating a product is audited', async ({ client, assert }) => {
     const admin = await createAdmin()
@@ -138,6 +143,9 @@ test.group('commerce audit — products', (group) => {
 
 test.group('commerce audit — categories', (group) => {
   group.each.setup(() => testUtils.db().withGlobalTransaction())
+  // La caja tiene que estar abierta: middleware.cashRegister bloquea todo movimiento
+  // de plata con 409 si no lo está. Va DESPUÉS de la transacción para revertirse con ella.
+  group.each.setup(async () => { await openCashSession() })
 
   test('creating and deleting a category is audited', async ({ client, assert }) => {
     const admin = await createAdmin()
@@ -166,6 +174,9 @@ test.group('commerce audit — categories', (group) => {
 
 test.group('commerce audit — sales', (group) => {
   group.each.setup(() => testUtils.db().withGlobalTransaction())
+  // La caja tiene que estar abierta: middleware.cashRegister bloquea todo movimiento
+  // de plata con 409 si no lo está. Va DESPUÉS de la transacción para revertirse con ella.
+  group.each.setup(async () => { await openCashSession() })
 
   test('a sale is audited with its total and its items', async ({ client, assert }) => {
     const seller = await createUserWithPermissions({ sales: { view: true, create: true } })
@@ -229,6 +240,9 @@ test.group('commerce audit — sales', (group) => {
 
 test.group('commerce audit — the read endpoint', (group) => {
   group.each.setup(() => testUtils.db().withGlobalTransaction())
+  // La caja tiene que estar abierta: middleware.cashRegister bloquea todo movimiento
+  // de plata con 409 si no lo está. Va DESPUÉS de la transacción para revertirse con ella.
+  group.each.setup(async () => { await openCashSession() })
 
   test('admin can read the commerce audit trail', async ({ client, assert }) => {
     const admin = await createAdmin()

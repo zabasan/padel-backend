@@ -456,6 +456,42 @@ const routes = {
     tokens: [{"old":"/api/v1/audit/commerce","type":0,"val":"api","end":""},{"old":"/api/v1/audit/commerce","type":0,"val":"v1","end":""},{"old":"/api/v1/audit/commerce","type":0,"val":"audit","end":""},{"old":"/api/v1/audit/commerce","type":0,"val":"commerce","end":""}],
     types: placeholder as Registry['commerce_audit_logs.index']['types'],
   },
+  'cash_register.current': {
+    methods: ["GET","HEAD"],
+    pattern: '/api/v1/cash-register/current',
+    tokens: [{"old":"/api/v1/cash-register/current","type":0,"val":"api","end":""},{"old":"/api/v1/cash-register/current","type":0,"val":"v1","end":""},{"old":"/api/v1/cash-register/current","type":0,"val":"cash-register","end":""},{"old":"/api/v1/cash-register/current","type":0,"val":"current","end":""}],
+    types: placeholder as Registry['cash_register.current']['types'],
+  },
+  'cash_register.index': {
+    methods: ["GET","HEAD"],
+    pattern: '/api/v1/cash-register/sessions',
+    tokens: [{"old":"/api/v1/cash-register/sessions","type":0,"val":"api","end":""},{"old":"/api/v1/cash-register/sessions","type":0,"val":"v1","end":""},{"old":"/api/v1/cash-register/sessions","type":0,"val":"cash-register","end":""},{"old":"/api/v1/cash-register/sessions","type":0,"val":"sessions","end":""}],
+    types: placeholder as Registry['cash_register.index']['types'],
+  },
+  'cash_register.show': {
+    methods: ["GET","HEAD"],
+    pattern: '/api/v1/cash-register/sessions/:id',
+    tokens: [{"old":"/api/v1/cash-register/sessions/:id","type":0,"val":"api","end":""},{"old":"/api/v1/cash-register/sessions/:id","type":0,"val":"v1","end":""},{"old":"/api/v1/cash-register/sessions/:id","type":0,"val":"cash-register","end":""},{"old":"/api/v1/cash-register/sessions/:id","type":0,"val":"sessions","end":""},{"old":"/api/v1/cash-register/sessions/:id","type":1,"val":"id","end":""}],
+    types: placeholder as Registry['cash_register.show']['types'],
+  },
+  'cash_register.open': {
+    methods: ["POST"],
+    pattern: '/api/v1/cash-register/open',
+    tokens: [{"old":"/api/v1/cash-register/open","type":0,"val":"api","end":""},{"old":"/api/v1/cash-register/open","type":0,"val":"v1","end":""},{"old":"/api/v1/cash-register/open","type":0,"val":"cash-register","end":""},{"old":"/api/v1/cash-register/open","type":0,"val":"open","end":""}],
+    types: placeholder as Registry['cash_register.open']['types'],
+  },
+  'cash_register.close': {
+    methods: ["POST"],
+    pattern: '/api/v1/cash-register/close',
+    tokens: [{"old":"/api/v1/cash-register/close","type":0,"val":"api","end":""},{"old":"/api/v1/cash-register/close","type":0,"val":"v1","end":""},{"old":"/api/v1/cash-register/close","type":0,"val":"cash-register","end":""},{"old":"/api/v1/cash-register/close","type":0,"val":"close","end":""}],
+    types: placeholder as Registry['cash_register.close']['types'],
+  },
+  'cash_register.rotate': {
+    methods: ["POST"],
+    pattern: '/api/v1/cash-register/rotate',
+    tokens: [{"old":"/api/v1/cash-register/rotate","type":0,"val":"api","end":""},{"old":"/api/v1/cash-register/rotate","type":0,"val":"v1","end":""},{"old":"/api/v1/cash-register/rotate","type":0,"val":"cash-register","end":""},{"old":"/api/v1/cash-register/rotate","type":0,"val":"rotate","end":""}],
+    types: placeholder as Registry['cash_register.rotate']['types'],
+  },
 } as const satisfies Record<string, AdonisEndpoint>
 
 export { routes }

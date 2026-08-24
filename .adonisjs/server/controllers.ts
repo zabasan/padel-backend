@@ -5,6 +5,7 @@
 
 export const controllers = {
   AccessTokens: () => import('#controllers/access_tokens_controller'),
+  CashRegister: () => import('#controllers/cash_register_controller'),
   CommerceAuditLogs: () => import('#controllers/commerce_audit_logs_controller'),
   CompleteProfile: () => import('#controllers/complete_profile_controller'),
   Courts: () => import('#controllers/courts_controller'),

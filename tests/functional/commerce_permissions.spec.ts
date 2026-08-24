@@ -1,6 +1,8 @@
 import { test } from '@japa/runner'
 import testUtils from '@adonisjs/core/services/test_utils'
-import { createAdmin, createProduct, createUserWithPermissions } from './fixtures.js'
+import { createAdmin, createProduct, createUserWithPermissions,
+  openCashSession,
+} from './fixtures.js'
 
 /**
  * Wiring proof for the two commerce modules, in the same spirit as
@@ -23,6 +25,9 @@ const idOf = (r: JsonResponse) => (r.body() as { id: number }).id
 
 test.group('commerce permissions — no commerce grant means no commerce at all', (group) => {
   group.each.setup(() => testUtils.db().withGlobalTransaction())
+  // La caja tiene que estar abierta: middleware.cashRegister bloquea todo movimiento
+  // de plata con 409 si no lo está. Va DESPUÉS de la transacción para revertirse con ella.
+  group.each.setup(async () => { await openCashSession() })
 
   test('a user holding neither products nor sales is locked out of every commerce route', async ({
     client,
@@ -46,6 +51,9 @@ test.group('commerce permissions — no commerce grant means no commerce at all'
 
 test.group('commerce permissions — the products/sales split', (group) => {
   group.each.setup(() => testUtils.db().withGlobalTransaction())
+  // La caja tiene que estar abierta: middleware.cashRegister bloquea todo movimiento
+  // de plata con 409 si no lo está. Va DESPUÉS de la transacción para revertirse con ella.
+  group.each.setup(async () => { await openCashSession() })
 
   // The POS reading endpoints carry `or: { module: 'sales', action: 'create' }` so a
   // grant that only SELLS still opens the till with a populated grid. Without the
@@ -148,6 +156,9 @@ test.group('commerce permissions — the products/sales split', (group) => {
 // thing more verbosely. The gates themselves are pinned by the groups above.
 test.group('commerce — full product lifecycle (permissions not under test)', (group) => {
   group.each.setup(() => testUtils.db().withGlobalTransaction())
+  // La caja tiene que estar abierta: middleware.cashRegister bloquea todo movimiento
+  // de plata con 409 si no lo está. Va DESPUÉS de la transacción para revertirse con ella.
+  group.each.setup(async () => { await openCashSession() })
 
   test('admin can run the full product lifecycle', async ({ client, assert }) => {
     const admin = await createAdmin()
