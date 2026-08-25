@@ -393,6 +393,18 @@ function toDateStr(val: unknown): string | null {
   return null
 }
 
+/**
+ * Canchas cuyo uso bloquea a `court`: el padre si es una cancha divisible, o todas las
+ * hijas si es la cancha completa. Las hermanas NO entran — se alquilan en paralelo.
+ * El caller debe traer `court` con `preload('subCourts')`.
+ */
+function relatedCourtIds(court: Court): number[] {
+  const ids: number[] = []
+  if (court.parentCourtId) ids.push(court.parentCourtId)
+  for (const sc of court.subCourts ?? []) ids.push(sc.id)
+  return ids
+}
+
 function hasRecurringConflict(reservations: Reservation[], startTime: DateTime, endTime: DateTime): boolean {
   const startART = startTime.setZone(ART_TZ)
   const endART = endTime.setZone(ART_TZ)
@@ -842,17 +854,11 @@ export default class ReservationsController {
 
     // Siblings can be reserved independently — only check parent (if booking a child)
     // or all children (if booking a parent).
-    const relatedCourtIds: number[] = []
-    if (court.parentCourtId) {
-      relatedCourtIds.push(court.parentCourtId)
-    }
-    if (court.subCourts.length > 0) {
-      for (const sc of court.subCourts) relatedCourtIds.push(sc.id)
-    }
+    const blockingCourtIds = relatedCourtIds(court)
 
-    if (relatedCourtIds.length > 0) {
+    if (blockingCourtIds.length > 0) {
       const relatedDirectConflict = await Reservation.query()
-        .whereIn('court_id', relatedCourtIds)
+        .whereIn('court_id', blockingCourtIds)
         .where('is_recurring', false)
         .whereNot('status', 'cancelled')
         .where('start_time', '<', endSQL)
@@ -868,7 +874,7 @@ export default class ReservationsController {
       }
 
       const relatedRecurring = await Reservation.query()
-        .whereIn('court_id', relatedCourtIds)
+        .whereIn('court_id', blockingCourtIds)
         .where('is_recurring', true)
         .whereNot('status', 'cancelled')
         .preload('hiddenDates')
@@ -1045,17 +1051,11 @@ export default class ReservationsController {
         return response.conflict({ message: 'La cancha ya está reservada en ese horario (reserva recurrente)' })
       }
 
-      const relatedCourtIds: number[] = []
-      if (court.parentCourtId) {
-        relatedCourtIds.push(court.parentCourtId)
-      }
-      if (court.subCourts.length > 0) {
-        for (const sc of court.subCourts) relatedCourtIds.push(sc.id)
-      }
+      const blockingCourtIds = relatedCourtIds(court)
 
-      if (relatedCourtIds.length > 0) {
+      if (blockingCourtIds.length > 0) {
         const relatedDirectConflict = await Reservation.query()
-          .whereIn('court_id', relatedCourtIds)
+          .whereIn('court_id', blockingCourtIds)
           .where('is_recurring', false)
           .whereNot('status', 'cancelled')
           .where('start_time', '<', endSQLc)
@@ -1071,7 +1071,7 @@ export default class ReservationsController {
         }
 
         const relatedRecurring = await Reservation.query()
-          .whereIn('court_id', relatedCourtIds)
+          .whereIn('court_id', blockingCourtIds)
           .where('is_recurring', true)
           .whereNot('status', 'cancelled')
           .preload('hiddenDates')
@@ -1507,29 +1507,69 @@ export default class ReservationsController {
     const queryWeekday = queryDate.weekday
     const queryDateStr = queryDate.toISODate()!
 
-    const directReservations = await Reservation.query()
-      .where('court_id', courtId)
-      .whereNot('status', 'cancelled')
-      .where('is_recurring', false)
-      .where('start_time', '>=', start.toUTC().toSQL()!)
-      .where('start_time', '<=', end.toUTC().toSQL()!)
-      .orderBy('start_time', 'asc')
+    const court = await Court.query().where('id', courtId).preload('subCourts').first()
+    if (!court) return response.notFound({ message: 'Cancha no encontrada' })
 
-    const allRecurring = await Reservation.query()
-      .where('court_id', courtId)
-      .whereNot('status', 'cancelled')
-      .where('is_recurring', true)
-      .where('start_time', '<=', end.toUTC().toSQL()!)
-      .preload('hiddenDates')
-
-    const activeRecurring = allRecurring.filter(r => {
+    // A recurring series only occupies the queried day when it falls on the same ART
+    // weekday and that specific occurrence has not been hidden.
+    const occursOnQueryDate = (r: Reservation) => {
       if (r.startTime.setZone(ART_TZ).weekday !== queryWeekday) return false
       const hiddenDates = (r.hiddenDates ?? []).map(hd => toDateStr(hd.hiddenDate))
-      if (hiddenDates.includes(queryDateStr)) return false
-      return true
+      return !hiddenDates.includes(queryDateStr)
+    }
+
+    const dayReservations = (courtIds: number | number[]) => {
+      const q = Reservation.query()
+        .whereNot('status', 'cancelled')
+        .where('is_recurring', false)
+        .where('start_time', '>=', start.toUTC().toSQL()!)
+        .where('start_time', '<=', end.toUTC().toSQL()!)
+        .orderBy('start_time', 'asc')
+      return Array.isArray(courtIds) ? q.whereIn('court_id', courtIds) : q.where('court_id', courtIds)
+    }
+
+    const recurringReservations = (courtIds: number | number[]) => {
+      const q = Reservation.query()
+        .whereNot('status', 'cancelled')
+        .where('is_recurring', true)
+        .where('start_time', '<=', end.toUTC().toSQL()!)
+        .preload('hiddenDates')
+      return Array.isArray(courtIds) ? q.whereIn('court_id', courtIds) : q.where('court_id', courtIds)
+    }
+
+    const directReservations = await dayReservations(courtId)
+    const allRecurring = await recurringReservations(courtId)
+    const activeRecurring = allRecurring.filter(occursOnQueryDate)
+
+    // Reserving the whole field blocks every sub-court and vice versa, so the grid must
+    // show those slots as taken — otherwise the caller only finds out at store() time,
+    // which already rejects the overlap with a 409.
+    const blockingCourtIds = relatedCourtIds(court)
+    if (blockingCourtIds.length === 0) {
+      return response.ok([...directReservations, ...activeRecurring])
+    }
+
+    const relatedDirect = await dayReservations(blockingCourtIds)
+    const relatedRecurring = (await recurringReservations(blockingCourtIds)).filter(occursOnQueryDate)
+
+    // Slimmed down on purpose: this endpoint is public, and the caller only needs the time
+    // span to grey out the slot. Nothing about the other court's customer, notes or price
+    // belongs in an availability answer.
+    const asBlockedSlot = (r: Reservation) => ({
+      id: r.id,
+      courtId: r.courtId,
+      startTime: r.startTime,
+      endTime: r.endTime,
+      status: r.status,
+      isRecurring: r.isRecurring,
     })
 
-    return response.ok([...directReservations, ...activeRecurring])
+    return response.ok([
+      ...directReservations,
+      ...activeRecurring,
+      ...relatedDirect.map(asBlockedSlot),
+      ...relatedRecurring.map(asBlockedSlot),
+    ])
   }
 
   async showNext({ params, request, response }: HttpContext) {

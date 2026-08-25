@@ -215,13 +215,21 @@ export async function createPadelCourt(pricePerHour = 2000): Promise<Court> {
 
 // Football counterpart of createPadelCourt — needed to prove the professor "padel only"
 // rule stays enforced even for actors who can override the hour window.
-export async function createFootballCourt(pricePerHour = 5000): Promise<Court> {
+/**
+ * Pass `parentCourtId` to model a divisible field: the parent is the whole pitch and each
+ * child is one of the halves it splits into. Booking either side blocks the other.
+ */
+export async function createFootballCourt(
+  pricePerHour = 5000,
+  opts: { parentCourtId?: number } = {}
+): Promise<Court> {
   const court = await Court.create({
     name: unique('Fixture Football Court'),
     type: 'football',
     description: 'Fixture court for functional tests',
     pricePerHour,
     isActive: true,
+    parentCourtId: opts.parentCourtId ?? null,
   })
   await CourtPriceRange.create({
     courtId: court.id,
