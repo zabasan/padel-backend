@@ -492,6 +492,18 @@ const routes = {
     tokens: [{"old":"/api/v1/cash-register/rotate","type":0,"val":"api","end":""},{"old":"/api/v1/cash-register/rotate","type":0,"val":"v1","end":""},{"old":"/api/v1/cash-register/rotate","type":0,"val":"cash-register","end":""},{"old":"/api/v1/cash-register/rotate","type":0,"val":"rotate","end":""}],
     types: placeholder as Registry['cash_register.rotate']['types'],
   },
+  'cash_register.store_bundle': {
+    methods: ["POST"],
+    pattern: '/api/v1/cash-register/bundles',
+    tokens: [{"old":"/api/v1/cash-register/bundles","type":0,"val":"api","end":""},{"old":"/api/v1/cash-register/bundles","type":0,"val":"v1","end":""},{"old":"/api/v1/cash-register/bundles","type":0,"val":"cash-register","end":""},{"old":"/api/v1/cash-register/bundles","type":0,"val":"bundles","end":""}],
+    types: placeholder as Registry['cash_register.store_bundle']['types'],
+  },
+  'cash_register.cancel_bundle': {
+    methods: ["POST"],
+    pattern: '/api/v1/cash-register/bundles/:id/cancel',
+    tokens: [{"old":"/api/v1/cash-register/bundles/:id/cancel","type":0,"val":"api","end":""},{"old":"/api/v1/cash-register/bundles/:id/cancel","type":0,"val":"v1","end":""},{"old":"/api/v1/cash-register/bundles/:id/cancel","type":0,"val":"cash-register","end":""},{"old":"/api/v1/cash-register/bundles/:id/cancel","type":0,"val":"bundles","end":""},{"old":"/api/v1/cash-register/bundles/:id/cancel","type":1,"val":"id","end":""},{"old":"/api/v1/cash-register/bundles/:id/cancel","type":0,"val":"cancel","end":""}],
+    types: placeholder as Registry['cash_register.cancel_bundle']['types'],
+  },
 } as const satisfies Record<string, AdonisEndpoint>
 
 export { routes }

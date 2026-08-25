@@ -46,6 +46,10 @@ export default class CashSession extends BaseModel {
   @column(money) declare outPostnet: number
   @column() declare movementsCount: number
 
+  // Fajos retirados del cajón en el turno, congelados al cerrar. Va aparte de out_*
+  // porque un fajo es un traslado, no una salida de plata. Ver la migración 1785000000002.
+  @column(money) declare bundlesEfectivo: number
+
   @column({ consume: (value) => (value === null || value === undefined ? null : Number(value)) })
   declare countedEfectivo: number | null
   @column() declare notes: string | null

@@ -979,4 +979,28 @@ export interface Registry {
       errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/cash_register_controller').default['rotate']>>>
     }
   }
+  'cash_register.store_bundle': {
+    methods: ["POST"]
+    pattern: '/api/v1/cash-register/bundles'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/cash_register_controller').default['storeBundle']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/cash_register_controller').default['storeBundle']>>>
+    }
+  }
+  'cash_register.cancel_bundle': {
+    methods: ["POST"]
+    pattern: '/api/v1/cash-register/bundles/:id/cancel'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/cash_register_controller').default['cancelBundle']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/cash_register_controller').default['cancelBundle']>>>
+    }
+  }
 }

@@ -32,9 +32,38 @@ export class AuthAccessTokenSchema extends BaseModel {
   declare updatedAt: DateTime | null
 }
 
+export class CashBundleSchema extends BaseModel {
+  static $columns = ['amount', 'cancelledAt', 'cancelledBy', 'cancelledInCashSessionId', 'cashSessionId', 'createdAt', 'createdBy', 'id', 'notes', 'status', 'updatedAt'] as const
+  $columns = CashBundleSchema.$columns
+  @column()
+  declare amount: string
+  @column.dateTime()
+  declare cancelledAt: DateTime | null
+  @column()
+  declare cancelledBy: number | null
+  @column()
+  declare cancelledInCashSessionId: number | null
+  @column()
+  declare cashSessionId: number
+  @column.dateTime({ autoCreate: true })
+  declare createdAt: DateTime
+  @column()
+  declare createdBy: number
+  @column({ isPrimary: true })
+  declare id: number
+  @column()
+  declare notes: string | null
+  @column()
+  declare status: string
+  @column.dateTime({ autoCreate: true, autoUpdate: true })
+  declare updatedAt: DateTime | null
+}
+
 export class CashSessionSchema extends BaseModel {
-  static $columns = ['businessDate', 'closedAt', 'closedBy', 'countedEfectivo', 'createdAt', 'expectedCloseAt', 'id', 'inEfectivo', 'inPostnet', 'inTransferencia', 'movementsCount', 'notes', 'openMarker', 'openedAt', 'openedBy', 'openingEfectivo', 'outEfectivo', 'outPostnet', 'outTransferencia', 'shiftEndMinute', 'shiftName', 'shiftStartMinute', 'updatedAt'] as const
+  static $columns = ['bundlesEfectivo', 'businessDate', 'closedAt', 'closedBy', 'countedEfectivo', 'createdAt', 'expectedCloseAt', 'id', 'inEfectivo', 'inPostnet', 'inTransferencia', 'movementsCount', 'notes', 'openMarker', 'openedAt', 'openedBy', 'openingEfectivo', 'outEfectivo', 'outPostnet', 'outTransferencia', 'shiftEndMinute', 'shiftName', 'shiftStartMinute', 'updatedAt'] as const
   $columns = CashSessionSchema.$columns
+  @column()
+  declare bundlesEfectivo: string
   @column.date()
   declare businessDate: DateTime
   @column.dateTime()

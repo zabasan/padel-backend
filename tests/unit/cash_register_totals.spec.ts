@@ -108,6 +108,61 @@ test.group('totalsFor', () => {
     assert.equal(t.net.total, 65000)
   })
 
+  /**
+   * Los fajos son la única clase de movimiento que NO entra a in/out/net, y estos cuatro
+   * tests son los que sostienen esa decisión. Un fajo es un traslado, no un egreso: si
+   * sumara a `out`, el neto del turno caería a casi cero apenas se retira la recaudación
+   * y la pantalla diría que el turno no facturó nada.
+   */
+  test('un fajo baja el efectivo esperado sin tocar in, out ni net', ({ assert }) => {
+    const t = totalsFor(
+      [
+        mov('court_payment', 'in', { efectivo: 100000 }),
+        mov('cash_bundle', 'out', { efectivo: 80000 }),
+      ],
+      5000
+    )
+    assert.equal(t.in.efectivo, 100000, 'el cobro sigue siendo un cobro')
+    assert.equal(t.out.efectivo, 0, 'el fajo no es una salida de plata del complejo')
+    assert.equal(t.net.total, 100000, 'el turno facturó 100.000, no 20.000')
+    assert.equal(t.bundlesEfectivo, 80000)
+    // 5.000 de fondo + 100.000 cobrados − 80.000 retirados en fajos
+    assert.equal(t.expectedEfectivo, 25000)
+  })
+
+  test('varios fajos se acumulan', ({ assert }) => {
+    const t = totalsFor(
+      [
+        mov('cash_bundle', 'out', { efectivo: 30000 }),
+        mov('cash_bundle', 'out', { efectivo: 45000 }),
+        mov('cash_bundle', 'out', { efectivo: 12500 }),
+      ],
+      0
+    )
+    assert.equal(t.bundlesEfectivo, 87500)
+    assert.equal(t.expectedEfectivo, -87500, 'sin cobros, el cajón queda debiendo')
+  })
+
+  test('un fajo anulado devuelve el efectivo al cajón', ({ assert }) => {
+    const t = totalsFor(
+      [
+        mov('court_payment', 'in', { efectivo: 50000 }),
+        mov('cash_bundle', 'out', { efectivo: 40000 }),
+        mov('cash_bundle_cancelled', 'in', { efectivo: 40000 }),
+      ],
+      0
+    )
+    assert.equal(t.bundlesEfectivo, 0)
+    assert.equal(t.expectedEfectivo, 50000)
+    assert.equal(t.in.efectivo, 50000, 'la anulación tampoco es un ingreso de plata')
+    assert.equal(t.count, 3, 'los tres hechos quedan visibles')
+  })
+
+  test('los fajos cuentan como movimientos del turno', ({ assert }) => {
+    const t = totalsFor([mov('cash_bundle', 'out', { efectivo: 1000 })])
+    assert.equal(t.count, 1)
+  })
+
   test('los centavos no acumulan error de punto flotante', ({ assert }) => {
     const t = totalsFor([
       mov('sale', 'in', { efectivo: 0.1 }),

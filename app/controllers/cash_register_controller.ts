@@ -1,10 +1,13 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import { DateTime } from 'luxon'
 import db from '@adonisjs/lucid/services/db'
+import vine from '@vinejs/vine'
+import CashBundle from '#models/cash_bundle'
 import CashSession from '#models/cash_session'
 import { can, getRequestPermissions } from '#services/permissions'
 import { round2 } from '#services/commerce'
 import {
+  getRequestCashSession,
   loadMovements,
   minuteLabel,
   newSessionFields,
@@ -14,6 +17,14 @@ import {
   totalsFor,
 } from '#services/cash_register'
 import { shiftForCharge } from '#services/cash_shifts'
+
+/** Un fajo tiene que tener plata adentro: 0 no es un retiro, es un click de más. */
+const bundleValidator = vine.compile(
+  vine.object({
+    amount: vine.number().positive(),
+    notes: vine.string().trim().maxLength(200).optional().nullable(),
+  })
+)
 
 /**
  * La caja del complejo. Una sola, secuencial: se abre, se cierra, se abre la siguiente.
@@ -253,6 +264,55 @@ export default class CashRegisterController {
     })
   }
 
+  /**
+   * POST /cash-register/bundles — retira un fajo del cajón.
+   *
+   * La sesión sale de `getRequestCashSession`, que el middleware ya sembró: el fajo
+   * pertenece al turno abierto, y si no hay ninguno el middleware devolvió 409 antes de
+   * llegar acá. Por eso el `!` de abajo es seguro y no un atajo.
+   */
+  async storeBundle(ctx: HttpContext) {
+    const { request, response, auth } = ctx
+    const data = await request.validateUsing(bundleValidator)
+
+    const session = (await getRequestCashSession(ctx))!
+
+    const bundle = await CashBundle.create({
+      cashSessionId: session.id,
+      amount: round2(data.amount),
+      notes: data.notes?.trim() || null,
+      status: 'completed',
+      createdBy: auth.user!.id,
+    })
+
+    await bundle.load('creator', (q) => q.select('id', 'fullName'))
+    return response.created({ bundle })
+  }
+
+  /**
+   * POST /cash-register/bundles/:id/cancel — anula un fajo y devuelve el efectivo al
+   * cajón del turno EN CURSO, que puede no ser el que lo retiró.
+   */
+  async cancelBundle(ctx: HttpContext) {
+    const { params, response, auth } = ctx
+    const bundle = await CashBundle.query().where('id', params.id).firstOrFail()
+
+    if (bundle.status === 'cancelled') {
+      return response.badRequest({ message: 'El fajo ya está anulado.' })
+    }
+
+    const session = (await getRequestCashSession(ctx))!
+
+    bundle.status = 'cancelled'
+    bundle.cancelledBy = auth.user!.id
+    bundle.cancelledAt = DateTime.now()
+    bundle.cancelledInCashSessionId = session.id
+    await bundle.save()
+
+    await bundle.load('canceller', (q) => q.select('id', 'fullName'))
+    return response.ok({ bundle })
+  }
+
   // ─── interno ──────────────────────────────────────────────────────────────
 
   private async closeOpenSession(
@@ -334,6 +394,8 @@ function applyClose(
   session.outTransferencia = totals.out.transferencia
   session.outPostnet = totals.out.postnet
   session.movementsCount = totals.count
+  // Aparte de out_*: un fajo es un traslado, no una salida de plata. Ver 1785000000002.
+  session.bundlesEfectivo = totals.bundlesEfectivo
   session.countedEfectivo = countedEfectivo
   session.notes = notes
   session.closedAt = at

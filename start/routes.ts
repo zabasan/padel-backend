@@ -359,6 +359,19 @@ router
             .post('cash-register/rotate', [controllers.CashRegister, 'rotate'])
             .use(middleware.permission({ module: 'cash_register', action: 'update' }))
             .use(middleware.permission({ module: 'cash_register', action: 'create' }))
+
+          // Fajos: efectivo retirado del cajón durante el turno. Llevan
+          // `middleware.cashRegister()` como los otros movimientos de plata — no se
+          // retira un fajo de una caja cerrada, ni del turno equivocado — y `update`,
+          // el mismo verbo que cerrar: quien arquea el cajón es quien retira los fajos.
+          router
+            .post('cash-register/bundles', [controllers.CashRegister, 'storeBundle'])
+            .use(middleware.permission({ module: 'cash_register', action: 'update' }))
+            .use(middleware.cashRegister())
+          router
+            .post('cash-register/bundles/:id/cancel', [controllers.CashRegister, 'cancelBundle'])
+            .use(middleware.permission({ module: 'cash_register', action: 'update' }))
+            .use(middleware.cashRegister())
         })
       })
       .use(middleware.auth())

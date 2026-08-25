@@ -374,6 +374,39 @@ test.group('route permission wiring — cash_register', (group) => {
     const allowed = await client.post('/api/v1/cash-register/rotate').loginAs(both).json({})
     assert.notEqual(allowed.status(), 403)
   })
+
+  // Los fajos van con `update`, el mismo verbo que cerrar: quien arquea el cajón es
+  // quien retira los fajos. `view` mira el turno, no lo opera.
+  test('cash_register.view alone does NOT open the bundle routes', async ({ client }) => {
+    const viewer = await createUserWithPermissions({ cash_register: { view: true } })
+    const create = await client
+      .post('/api/v1/cash-register/bundles')
+      .loginAs(viewer)
+      .json({ amount: 1000 })
+    create.assertStatus(403)
+    const cancel = await client
+      .post('/api/v1/cash-register/bundles/1/cancel')
+      .loginAs(viewer)
+      .json({})
+    cancel.assertStatus(403)
+  })
+
+  // El gate de permiso corre ANTES que el de caja abierta, así que el 409 de "la caja
+  // está cerrada" es la prueba de que pasó el 403. Que ese 409 llegue es justo lo que
+  // se quiere: sin permiso nunca se llegaría tan lejos.
+  test('cash_register.update reaches the bundle routes', async ({ client, assert }) => {
+    const cashier = await createUserWithPermissions({ cash_register: { update: true } })
+    const create = await client
+      .post('/api/v1/cash-register/bundles')
+      .loginAs(cashier)
+      .json({ amount: 1000 })
+    assert.notEqual(create.status(), 403)
+    const cancel = await client
+      .post('/api/v1/cash-register/bundles/1/cancel')
+      .loginAs(cashier)
+      .json({})
+    assert.notEqual(cancel.status(), 403)
+  })
 })
 
 test.group('route permission wiring — payments', (group) => {

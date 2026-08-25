@@ -85,6 +85,8 @@ export type ScannedRoutes = {
     'cash_register.open': { paramsTuple?: []; params?: {} }
     'cash_register.close': { paramsTuple?: []; params?: {} }
     'cash_register.rotate': { paramsTuple?: []; params?: {} }
+    'cash_register.store_bundle': { paramsTuple?: []; params?: {} }
+    'cash_register.cancel_bundle': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
   }
   GET: {
     'settings.show': { paramsTuple?: []; params?: {} }
@@ -173,6 +175,8 @@ export type ScannedRoutes = {
     'cash_register.open': { paramsTuple?: []; params?: {} }
     'cash_register.close': { paramsTuple?: []; params?: {} }
     'cash_register.rotate': { paramsTuple?: []; params?: {} }
+    'cash_register.store_bundle': { paramsTuple?: []; params?: {} }
+    'cash_register.cancel_bundle': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
   }
   PUT: {
     'complete_profile.store': { paramsTuple?: []; params?: {} }

@@ -122,5 +122,7 @@ export interface ApiDefinition {
     open: typeof routes['cash_register.open']
     close: typeof routes['cash_register.close']
     rotate: typeof routes['cash_register.rotate']
+    storeBundle: typeof routes['cash_register.store_bundle']
+    cancelBundle: typeof routes['cash_register.cancel_bundle']
   }
 }

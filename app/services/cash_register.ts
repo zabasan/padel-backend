@@ -1,5 +1,6 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import { DateTime } from 'luxon'
+import CashBundle from '#models/cash_bundle'
 import CashSession from '#models/cash_session'
 import Expense from '#models/expense'
 import ReservationPayment from '#models/reservation_payment'
@@ -16,7 +17,7 @@ import {
 } from '#services/cash_shifts'
 
 /**
- * Los seis hechos que mueven el cajón. Tres entran, tres salen.
+ * Los ocho hechos que mueven el cajón. Cuatro entran, cuatro salen.
  *
  * La regla de atribución es una sola y vale para todos: un movimiento pertenece al
  * turno en que OCURRIÓ EL HECHO — created_at, reverted_at o cancelled_at — nunca a la
@@ -26,6 +27,10 @@ import {
  *
  * Un cobro hecho y revertido dentro del mismo turno aparece dos veces, +X y −X, y
  * netea cero. Es correcto y además honesto: el turno muestra que pasó.
+ *
+ * Los dos últimos — el fajo y su anulación — son la excepción a la aritmética: mueven
+ * el cajón pero NO son plata que entró o salió del complejo, así que `totalsFor` los
+ * saca de `in`/`out`/`net` y los lleva por una vía propia. Ver el comentario ahí.
  */
 export type MovementKind =
   | 'court_payment'
@@ -34,6 +39,13 @@ export type MovementKind =
   | 'expense'
   | 'payment_reverted'
   | 'sale_cancelled'
+  | 'cash_bundle'
+  | 'cash_bundle_cancelled'
+
+/** Los dos kinds que son traslado y no ingreso/egreso. */
+export function isBundleKind(kind: MovementKind): boolean {
+  return kind === 'cash_bundle' || kind === 'cash_bundle_cancelled'
+}
 
 export interface CashMovement {
   at: string
@@ -60,7 +72,9 @@ export interface CashTotals {
   in: MethodTotals
   out: MethodTotals
   net: MethodTotals
-  /** Lo que TIENE que haber en el cajón: fondo + entradas − salidas, solo efectivo. */
+  /** Fajos retirados menos fajos anulados. Baja el cajón sin ser una salida de plata. */
+  bundlesEfectivo: number
+  /** Lo que TIENE que haber en el cajón: fondo + entradas − salidas − fajos, solo efectivo. */
   expectedEfectivo: number
   count: number
 }
@@ -265,8 +279,56 @@ export async function loadMovements(
     })
   }
 
+  // ── 7 y 8. Fajos y sus anulaciones ────────────────────────────────────────
+  // Sin filtro de `status`, por la misma razón que las ventas: un fajo retirado y
+  // anulado en el mismo turno tiene que aparecer como −X y +X. Filtrar dejaría solo la
+  // anulación y el cajón cerraría con plata que nunca volvió.
+  const bundles = await CashBundle.query()
+    .where('cash_session_id', sessionId)
+    .preload('creator', (q) => q.select('id', 'fullName'))
+    .orderBy('created_at', 'desc')
+
+  for (const bundle of bundles) {
+    movements.push({
+      at: bundle.createdAt.toISO()!,
+      kind: 'cash_bundle',
+      direction: 'out',
+      actorId: bundle.createdBy,
+      actorName: bundle.creator?.fullName ?? null,
+      label: bundle.notes ? `Fajo · ${bundle.notes}` : 'Fajo',
+      reference: `#${bundle.id}`,
+      ...bundleSplit(bundle),
+    })
+  }
+
+  // Un fajo retirado en un turno ANTERIOR y anulado en este devuelve el efectivo al
+  // cajón AHORA: la plata vuelve al turno en que se anuló, no al que la retiró.
+  const bundlesCancelled = await CashBundle.query()
+    .where('cancelled_in_cash_session_id', sessionId)
+    .preload('canceller', (q) => q.select('id', 'fullName'))
+    .orderBy('cancelled_at', 'desc')
+
+  for (const bundle of bundlesCancelled) {
+    movements.push({
+      at: (bundle.cancelledAt ?? bundle.createdAt).toISO()!,
+      kind: 'cash_bundle_cancelled',
+      direction: 'in',
+      actorId: bundle.cancelledBy,
+      actorName: bundle.canceller?.fullName ?? null,
+      label: 'Fajo anulado',
+      reference: `#${bundle.id}`,
+      ...bundleSplit(bundle),
+    })
+  }
+
   movements.sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0))
   return movements
+}
+
+// Un fajo es un fajo de billetes: todo el monto es efectivo, siempre.
+function bundleSplit(bundle: CashBundle) {
+  const amount = round2(Number(bundle.amount ?? 0))
+  return { efectivo: amount, transferencia: 0, postnet: 0, total: amount }
 }
 
 // El gasto guarda su importe en `amount`, no en `total` como las otras dos tablas.
@@ -279,11 +341,27 @@ function expenseSplit(e: Expense) {
   }
 }
 
-/** Pura: totaliza una lista de movimientos ya normalizada. */
+/**
+ * Pura: totaliza una lista de movimientos ya normalizada.
+ *
+ * Los fajos se cuentan APARTE de `in` / `out` / `net`, y esa es la única sutileza de
+ * esta función. Un fajo baja el cajón pero no es plata que el complejo haya gastado: si
+ * entrara al bucket `out` junto con los gastos, el neto del turno caería a casi cero
+ * apenas se retira la recaudación — la pantalla diría que el turno no facturó nada — y
+ * el cierre congelaría como "salidas" cientos de miles que nadie gastó.
+ *
+ * Sí entran a `count`: son hechos del turno y se muestran en la lista de movimientos.
+ */
 export function totalsFor(movements: CashMovement[], openingEfectivo = 0): CashTotals {
   const acc = { in: { ...EMPTY }, out: { ...EMPTY } }
+  let bundlesEfectivo = 0
 
   for (const m of movements) {
+    if (isBundleKind(m.kind)) {
+      // 'cash_bundle' sale del cajón (+ al acumulado retirado), su anulación lo devuelve.
+      bundlesEfectivo = round2(bundlesEfectivo + (m.direction === 'out' ? m.total : -m.total))
+      continue
+    }
     const bucket = acc[m.direction]
     bucket.efectivo = round2(bucket.efectivo + m.efectivo)
     bucket.transferencia = round2(bucket.transferencia + m.transferencia)
@@ -302,7 +380,8 @@ export function totalsFor(movements: CashMovement[], openingEfectivo = 0): CashT
     in: acc.in,
     out: acc.out,
     net,
-    expectedEfectivo: round2(round2(openingEfectivo) + net.efectivo),
+    bundlesEfectivo,
+    expectedEfectivo: round2(round2(openingEfectivo) + net.efectivo - bundlesEfectivo),
     count: movements.length,
   }
 }
@@ -415,6 +494,10 @@ export function serializeSession(session: CashSession): Record<string, any> {
     countedEfectivo: session.countedEfectivo ?? null,
     notes: session.notes ?? null,
     openMarker: session.openMarker ?? null,
+    // Misma razón que los de arriba: una sesión recién creada nunca asignó la columna
+    // (la llena el default de la base), así que salía ausente en vez de en 0. El
+    // historial la resta para calcular el efectivo esperado, y `undefined` lo dinamita.
+    bundlesEfectivo: Number(session.bundlesEfectivo ?? 0),
     shiftLabel: `${session.shiftName} (${minuteLabel(session.shiftStartMinute)}–${minuteLabel(session.shiftEndMinute)})`,
   }
 }

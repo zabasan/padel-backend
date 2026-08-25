@@ -707,3 +707,226 @@ test.group('caja — arqueo y movimientos', (group) => {
     assert.equal(body.totals.in.efectivo, 6000)
   })
 })
+
+/**
+ * Los FAJOS: efectivo retirado del cajón durante el turno.
+ *
+ * Lo que estos tests protegen es una sola idea, y es la que hace distinto al fajo de
+ * todos los demás movimientos: baja el cajón SIN ser una salida de plata del complejo.
+ * Por eso cada test que mira `expectedEfectivo` mira también `net`, y viceversa — el
+ * error que se quiere atrapar es justamente el de mezclarlos.
+ */
+test.group('caja — fajos', (group) => {
+  group.each.setup(() => testUtils.db().withGlobalTransaction())
+  // La caja arranca CERRADA, independiente de lo que el complejo tenga abierto en la
+  // app. Va DESPUÉS de la transacción para revertirse con ella. Ver closeAmbientCashRegister.
+  group.each.setup(async () => {
+    await closeAmbientCashRegister()
+  })
+
+  test('un fajo baja el efectivo esperado y no toca lo que el turno facturó', async ({
+    client,
+    assert,
+  }) => {
+    const staff = await createUserWithPermissions(CASH_AND_PAY_GRANTS)
+    await setShifts([shiftAroundNow()])
+    await client.post('/api/v1/cash-register/open').loginAs(staff).json({ openingEfectivo: 5000 })
+    await payCourt(client, staff, 100000)
+
+    const created = await client
+      .post('/api/v1/cash-register/bundles')
+      .loginAs(staff)
+      .json({ amount: 80000, notes: 'primer retiro' })
+    created.assertStatus(201)
+
+    const current = await client.get('/api/v1/cash-register/current').loginAs(staff)
+    const body = current.body()
+
+    assert.equal(body.totals.bundlesEfectivo, 80000)
+    assert.equal(body.totals.out.efectivo, 0, 'un fajo no es una salida de plata')
+    assert.equal(body.totals.net.total, 100000, 'el turno facturó 100.000')
+    // 5.000 de fondo + 100.000 cobrados − 80.000 retirados
+    assert.equal(body.totals.expectedEfectivo, 25000)
+
+    const bundle = body.movements.find((m: any) => m.kind === 'cash_bundle') as any
+    assert.exists(bundle, 'el fajo se muestra entre los movimientos del turno')
+    assert.equal(bundle.direction, 'out')
+    assert.equal(bundle.total, 80000)
+    assert.include(bundle.label, 'primer retiro')
+  })
+
+  test('varios fajos en el mismo turno se acumulan', async ({ client, assert }) => {
+    const staff = await createUserWithPermissions(CASH_GRANTS)
+    await setShifts([shiftAroundNow()])
+    await client.post('/api/v1/cash-register/open').loginAs(staff).json({})
+
+    for (const amount of [30000, 45000, 12500]) {
+      const res = await client.post('/api/v1/cash-register/bundles').loginAs(staff).json({ amount })
+      res.assertStatus(201)
+    }
+
+    const current = await client.get('/api/v1/cash-register/current').loginAs(staff)
+    assert.equal(current.body().totals.bundlesEfectivo, 87500)
+    assert.equal(current.body().totals.count, 3)
+  })
+
+  test('un fajo de monto cero se rechaza', async ({ client }) => {
+    const staff = await createUserWithPermissions(CASH_GRANTS)
+    await setShifts([shiftAroundNow()])
+    await client.post('/api/v1/cash-register/open').loginAs(staff).json({})
+
+    const res = await client
+      .post('/api/v1/cash-register/bundles')
+      .loginAs(staff)
+      .json({ amount: 0 })
+    res.assertStatus(422)
+  })
+
+  test('con la caja cerrada, cargar un fajo devuelve 409 CASH_REGISTER_CLOSED', async ({
+    client,
+    assert,
+  }) => {
+    const staff = await createUserWithPermissions(CASH_GRANTS)
+    const res = await client
+      .post('/api/v1/cash-register/bundles')
+      .loginAs(staff)
+      .json({ amount: 1000 })
+    res.assertStatus(409)
+    assert.equal((res.body() as any).code, 'CASH_REGISTER_CLOSED')
+  })
+
+  test('anular un fajo en el mismo turno devuelve el efectivo y deja los dos hechos', async ({
+    client,
+    assert,
+  }) => {
+    const staff = await createUserWithPermissions(CASH_AND_PAY_GRANTS)
+    await setShifts([shiftAroundNow()])
+    await client.post('/api/v1/cash-register/open').loginAs(staff).json({})
+    await payCourt(client, staff, 50000)
+
+    const created = await client
+      .post('/api/v1/cash-register/bundles')
+      .loginAs(staff)
+      .json({ amount: 40000 })
+    const bundleId = created.body().bundle.id
+
+    const cancelled = await client
+      .post(`/api/v1/cash-register/bundles/${bundleId}/cancel`)
+      .loginAs(staff)
+      .json({})
+    cancelled.assertStatus(200)
+
+    const after = await client.get('/api/v1/cash-register/current').loginAs(staff)
+    const body = after.body()
+    assert.equal(body.totals.bundlesEfectivo, 0)
+    assert.equal(body.totals.expectedEfectivo, 50000, 'el efectivo volvió al cajón')
+    assert.equal(body.totals.in.efectivo, 50000, 'la anulación tampoco es un ingreso')
+    assert.equal(body.totals.count, 3, 'el cobro, el fajo y su anulación quedan visibles')
+  })
+
+  test('anular dos veces el mismo fajo se rechaza', async ({ client }) => {
+    const staff = await createUserWithPermissions(CASH_GRANTS)
+    await setShifts([shiftAroundNow()])
+    await client.post('/api/v1/cash-register/open').loginAs(staff).json({})
+
+    const created = await client
+      .post('/api/v1/cash-register/bundles')
+      .loginAs(staff)
+      .json({ amount: 1000 })
+    const bundleId = created.body().bundle.id
+
+    await client.post(`/api/v1/cash-register/bundles/${bundleId}/cancel`).loginAs(staff).json({})
+    const again = await client
+      .post(`/api/v1/cash-register/bundles/${bundleId}/cancel`)
+      .loginAs(staff)
+      .json({})
+    again.assertStatus(400)
+  })
+
+  /**
+   * El caso que justifica la columna `cancelled_in_cash_session_id`: la plata vuelve al
+   * cajón del turno en que se anuló, no al que la retiró. Si volviera al original, el
+   * turno ya cerrado cambiaría su arqueo después de cerrado.
+   */
+  test('un fajo anulado en el turno siguiente devuelve el efectivo a ESE turno', async ({
+    client,
+    assert,
+  }) => {
+    const staff = await createUserWithPermissions(CASH_GRANTS)
+    await setShifts([shiftAroundNow()])
+    const opened = await client.post('/api/v1/cash-register/open').loginAs(staff).json({})
+    const firstId = opened.body().session.id
+
+    const created = await client
+      .post('/api/v1/cash-register/bundles')
+      .loginAs(staff)
+      .json({ amount: 20000 })
+    const bundleId = created.body().bundle.id
+
+    await client.post('/api/v1/cash-register/close').loginAs(staff).json({ sessionId: firstId })
+    await client.post('/api/v1/cash-register/open').loginAs(staff).json({})
+
+    await client.post(`/api/v1/cash-register/bundles/${bundleId}/cancel`).loginAs(staff).json({})
+
+    const currentRes = await client.get('/api/v1/cash-register/current').loginAs(staff)
+    const current = currentRes.body()
+    assert.equal(current.totals.bundlesEfectivo, -20000, 'el efectivo entra al turno nuevo')
+    assert.equal(current.totals.expectedEfectivo, 20000)
+
+    const pastRes = await client.get(`/api/v1/cash-register/sessions/${firstId}`).loginAs(staff)
+    assert.equal(pastRes.body().totals.bundlesEfectivo, 20000, 'el turno cerrado no cambia')
+  })
+
+  test('cerrar congela los fajos y el turno siguiente arranca en cero', async ({
+    client,
+    assert,
+  }) => {
+    const staff = await createUserWithPermissions(CASH_AND_PAY_GRANTS)
+    await setShifts([shiftAroundNow()])
+    const opened = await client
+      .post('/api/v1/cash-register/open')
+      .loginAs(staff)
+      .json({ openingEfectivo: 2000 })
+    await payCourt(client, staff, 30000)
+    await client.post('/api/v1/cash-register/bundles').loginAs(staff).json({ amount: 25000 })
+
+    const closed = await client
+      .post('/api/v1/cash-register/close')
+      .loginAs(staff)
+      .json({ sessionId: opened.body().session.id, countedEfectivo: 7000 })
+    closed.assertStatus(200)
+
+    const session = closed.body().session
+    assert.equal(Number(session.bundlesEfectivo), 25000)
+    assert.equal(Number(session.outEfectivo), 0, 'el fajo no se congela como salida')
+    assert.equal(Number(session.inEfectivo), 30000)
+    // La cuenta que hace el historial con las columnas congeladas:
+    // 2.000 de fondo + 30.000 − 0 − 25.000 = 7.000, que es lo que contaron.
+    const expected =
+      Number(session.openingEfectivo) +
+      (Number(session.inEfectivo) - Number(session.outEfectivo)) -
+      Number(session.bundlesEfectivo)
+    assert.equal(expected, 7000)
+
+    await client.post('/api/v1/cash-register/open').loginAs(staff).json({})
+    const current = await client.get('/api/v1/cash-register/current').loginAs(staff)
+    assert.equal(current.body().totals.bundlesEfectivo, 0)
+  })
+
+  test('el detalle del cierre recalcula el mismo total de fajos que se congeló', async ({
+    client,
+    assert,
+  }) => {
+    const staff = await createUserWithPermissions(CASH_GRANTS)
+    await setShifts([shiftAroundNow()])
+    const opened = await client.post('/api/v1/cash-register/open').loginAs(staff).json({})
+    const sessionId = opened.body().session.id
+    await client.post('/api/v1/cash-register/bundles').loginAs(staff).json({ amount: 15000 })
+    await client.post('/api/v1/cash-register/close').loginAs(staff).json({ sessionId })
+
+    const detail = await client.get(`/api/v1/cash-register/sessions/${sessionId}`).loginAs(staff)
+    detail.assertStatus(200)
+    assert.equal(detail.body().totals.bundlesEfectivo, 15000)
+    assert.equal(Number(detail.body().session.bundlesEfectivo), 15000)
+  })
+})
