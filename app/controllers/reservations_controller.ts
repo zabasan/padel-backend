@@ -1518,44 +1518,28 @@ export default class ReservationsController {
       return !hiddenDates.includes(queryDateStr)
     }
 
-    const dayReservations = (courtIds: number | number[]) => {
-      const q = Reservation.query()
+    const dayReservations = (ids: number[]) =>
+      Reservation.query()
+        .whereIn('court_id', ids)
         .whereNot('status', 'cancelled')
         .where('is_recurring', false)
         .where('start_time', '>=', start.toUTC().toSQL()!)
         .where('start_time', '<=', end.toUTC().toSQL()!)
         .orderBy('start_time', 'asc')
-      return Array.isArray(courtIds) ? q.whereIn('court_id', courtIds) : q.where('court_id', courtIds)
-    }
 
-    const recurringReservations = (courtIds: number | number[]) => {
-      const q = Reservation.query()
+    const recurringReservations = (ids: number[]) =>
+      Reservation.query()
+        .whereIn('court_id', ids)
         .whereNot('status', 'cancelled')
         .where('is_recurring', true)
         .where('start_time', '<=', end.toUTC().toSQL()!)
         .preload('hiddenDates')
-      return Array.isArray(courtIds) ? q.whereIn('court_id', courtIds) : q.where('court_id', courtIds)
-    }
 
-    const directReservations = await dayReservations(courtId)
-    const allRecurring = await recurringReservations(courtId)
-    const activeRecurring = allRecurring.filter(occursOnQueryDate)
-
-    // Reserving the whole field blocks every sub-court and vice versa, so the grid must
-    // show those slots as taken — otherwise the caller only finds out at store() time,
-    // which already rejects the overlap with a 409.
-    const blockingCourtIds = relatedCourtIds(court)
-    if (blockingCourtIds.length === 0) {
-      return response.ok([...directReservations, ...activeRecurring])
-    }
-
-    const relatedDirect = await dayReservations(blockingCourtIds)
-    const relatedRecurring = (await recurringReservations(blockingCourtIds)).filter(occursOnQueryDate)
-
-    // Slimmed down on purpose: this endpoint is public, and the caller only needs the time
-    // span to grey out the slot. Nothing about the other court's customer, notes or price
-    // belongs in an availability answer.
-    const asBlockedSlot = (r: Reservation) => ({
+    // This route is public (`start/routes.ts`, outside `middleware.auth()`), and answering
+    // "is this slot taken?" only needs the span. Who booked it, what they wrote in the
+    // notes and what they paid are none of an anonymous caller's business, so every row
+    // is projected down to the fields the booking grids actually read.
+    const asSlot = (r: Reservation) => ({
       id: r.id,
       courtId: r.courtId,
       startTime: r.startTime,
@@ -1564,12 +1548,15 @@ export default class ReservationsController {
       isRecurring: r.isRecurring,
     })
 
-    return response.ok([
-      ...directReservations,
-      ...activeRecurring,
-      ...relatedDirect.map(asBlockedSlot),
-      ...relatedRecurring.map(asBlockedSlot),
-    ])
+    // Reserving the whole field blocks every sub-court and vice versa, so the grid must
+    // show those slots as taken — otherwise the caller only finds out at store() time,
+    // which already rejects the overlap with a 409.
+    const courtIds = [court.id, ...relatedCourtIds(court)]
+
+    const direct = await dayReservations(courtIds)
+    const recurring = (await recurringReservations(courtIds)).filter(occursOnQueryDate)
+
+    return response.ok([...direct, ...recurring].map(asSlot))
   }
 
   async showNext({ params, request, response }: HttpContext) {

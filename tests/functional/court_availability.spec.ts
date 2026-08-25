@@ -166,7 +166,12 @@ test.group('courts availability — parent/child blocking', (group) => {
     assert.isEmpty(response.body())
   })
 
-  test('related-court rows carry only the time span, never the other booking details', async ({
+  /**
+   * The route is public, so a row here must never carry the customer, the notes or the
+   * price of a booking. It answers "taken or free", nothing else — and that holds for the
+   * queried court's own rows just as much as for the related court's.
+   */
+  test('every row carries only the time span, never the booking details', async ({
     client,
     assert,
   }) => {
@@ -175,18 +180,19 @@ test.group('courts availability — parent/child blocking', (group) => {
     const at = slotAt(16)
 
     await book(parent, customer, at)
+    await book(childA, customer, at.plus({ hours: 2 }))
 
-    const response = await availability(client, childA.id, at.toISODate()!)
-    response.assertStatus(200)
-    const [row] = response.body() as any[]
-    assert.deepEqual(Object.keys(row).sort(), [
-      'courtId',
-      'endTime',
-      'id',
-      'isRecurring',
-      'startTime',
-      'status',
-    ])
+    const slimKeys = ['courtId', 'endTime', 'id', 'isRecurring', 'startTime', 'status']
+
+    for (const courtId of [parent.id, childA.id]) {
+      const response = await availability(client, courtId, at.toISODate()!)
+      response.assertStatus(200)
+      const rows = response.body() as any[]
+      assert.lengthOf(rows, 2)
+      for (const row of rows) {
+        assert.deepEqual(Object.keys(row).sort(), slimKeys)
+      }
+    }
   })
 
   test('a court with no parent or children answers with its own bookings only', async ({
