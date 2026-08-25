@@ -13,6 +13,7 @@ import User from '#models/user'
 import reservationCalendarCache from '#services/reservation_calendar_cache'
 import { calculateCourtPrice } from '#services/court_pricing'
 import { can, resolvePermissionsForUser } from '#services/permissions'
+import { MIN_BOOKING_MINUTES, MAX_BOOKING_MINUTES } from '#services/booking_rules'
 
 /**
  * "Es personal del complejo": ve y gestiona reservas ajenas, en vez de solo las propias.
@@ -53,7 +54,7 @@ const reservationValidator = vine.compile(
   vine.object({
     courtId: vine.number().positive(),
     startTime: vine.string(),
-    duration: vine.number().min(30).max(480),
+    duration: vine.number().min(MIN_BOOKING_MINUTES).max(MAX_BOOKING_MINUTES),
     contactPhone: vine.string().trim().optional(),
     notes: vine.string().trim().optional(),
     customerId: vine.number().positive().optional(),
@@ -69,7 +70,7 @@ const reservationValidator = vine.compile(
 const editReservationValidator = vine.compile(
   vine.object({
     startTime: vine.string().optional(),
-    duration: vine.number().min(30).max(480).optional(),
+    duration: vine.number().min(MIN_BOOKING_MINUTES).max(MAX_BOOKING_MINUTES).optional(),
     contactPhone: vine.string().trim().optional(),
     notes: vine.string().trim().optional(),
     customerId: vine.number().positive().optional().nullable(),

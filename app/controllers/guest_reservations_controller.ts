@@ -5,6 +5,7 @@ import Court from '#models/court'
 import vine from '@vinejs/vine'
 import { DateTime } from 'luxon'
 import { calculateCourtPrice } from '#services/court_pricing'
+import { MIN_BOOKING_MINUTES, MAX_BOOKING_MINUTES } from '#services/booking_rules'
 import { serializeSessionUser } from '#transformers/user_session'
 
 const guestReservationValidator = vine.compile(
@@ -13,7 +14,7 @@ const guestReservationValidator = vine.compile(
     phone: vine.string().trim().minLength(6),
     courtId: vine.number().positive(),
     startTime: vine.string(),
-    duration: vine.number().min(30).max(480),
+    duration: vine.number().min(MIN_BOOKING_MINUTES).max(MAX_BOOKING_MINUTES),
     notes: vine.string().trim().optional(),
     padelCategory: vine.enum(['C1','C2','C3','C4','C5','C6','C7','C8','C9'] as const).optional().nullable(),
   })
