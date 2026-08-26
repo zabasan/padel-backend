@@ -19,9 +19,10 @@ import {
  *    reconciliación dejaría de reconciliar — que es exactamente la razón por la que el
  *    kiosco ya vive en su propio bloque.
  *
- * Se afirma sobre DELTAS, nunca sobre valores absolutos: `.env.test` apunta a la base de
- * dev real, que tiene reservas y ventas de verdad. Un assert absoluto acá pasaría hoy y
- * fallaría mañana por datos que el test no creó.
+ * Se afirma sobre DELTAS, nunca sobre valores absolutos. La razón original era que la
+ * suite corría contra la base de dev; hoy corre contra `padel_test`, así que un assert
+ * absoluto también sería válido. Los deltas se mantienen porque siguen siendo correctos
+ * y reescribirlos no aporta nada: un test nuevo puede ir directo a valores absolutos.
  */
 
 const STATS_READER = { stats: { view: true }, expenses: { view: true, create: true } }

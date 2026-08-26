@@ -19,8 +19,8 @@ import {
  * es el contrato del código. Un test atado a `admin` se rompe el día que alguien mueve una
  * casilla en una pantalla, sin que haya ningún bug.
  *
- * El grupo entero corre dentro de una transacción global revertida: `.env.test` apunta a la
- * base de dev real y no existe una base de test aislada.
+ * El grupo entero corre dentro de una transacción global revertida, así que nada de lo que
+ * escribe sobrevive al test.
  */
 
 type JsonResponse = { body(): unknown }

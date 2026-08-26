@@ -14,10 +14,9 @@ test.group('RBAC seed — migrated database matches the source-of-truth matrix',
 
   /**
    * These assert the SEED is intact, never that the database holds nothing else.
-   * The roles ABM lets admins create roles at runtime and `.env.test` points at
-   * the real dev database, so any exact global count here would go red the first
-   * time someone uses the screen — including soft-deleted roles, whose rows stay
-   * on disk by design.
+   * The roles ABM lets admins create roles at runtime, and soft-deleted roles keep
+   * their rows on disk by design, so an exact global count would be a tripwire on
+   * ordinary use of the screen rather than on a defect.
    */
 
   test('all 5 seeded roles exist', async ({ assert }) => {

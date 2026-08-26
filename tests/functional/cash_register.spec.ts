@@ -28,8 +28,8 @@ import {
  * (turno en curso / sin turno en curso / otro turno en curso) por el camino de código
  * real, sin inyectar tiempo falso en ningún lado.
  *
- * El grupo entero corre en una transacción global revertida: `.env.test` apunta a la
- * base de dev real, así que nada de valores absolutos y nada que sobreviva al test.
+ * El grupo entero corre en una transacción global revertida, así que nada de lo que
+ * escribe sobrevive al test.
  */
 
 const CASH_GRANTS = { cash_register: { view: true, create: true, update: true } }
@@ -121,10 +121,12 @@ test.group('caja — apertura y unicidad', (group) => {
   /**
    * EL CONTRATO DEL FIXTURE, escrito como test.
    *
-   * `.env.test` apunta a la base de dev REAL, y el UNIQUE sobre `open_marker` es una
-   * restricción global que ve las filas commiteadas afuera de la transacción. Si el
-   * complejo deja la caja abierta en la app, sin `closeAmbientCashRegister()` este spec
-   * entero se cae con `Duplicate entry '1'` — pasó, y fueron ~100 tests.
+   * El UNIQUE sobre `open_marker` es una restricción GLOBAL: ve las filas commiteadas
+   * afuera de la transacción del test. Cuando la suite corría contra la base de dev,
+   * bastaba con que el complejo dejara la caja abierta en la app para que este spec
+   * entero se cayera con `Duplicate entry '1'` — pasó, y fueron ~100 tests. La base
+   * aislada saca esa causa de encima, pero el fixture sigue siendo el que FIJA la
+   * precondición en vez de heredarla, y eso es lo que este test verifica.
    *
    * Este test afirma la precondición directamente: si alguien saca la neutralización del
    * setup o le cambia la semántica, se pone rojo acá y no en cascada por todos lados.

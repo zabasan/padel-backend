@@ -8,6 +8,7 @@ import testUtils from '@adonisjs/core/services/test_utils'
 import { authApiClient } from '@adonisjs/auth/plugins/api_client'
 import { sessionApiClient } from '@adonisjs/session/plugins/api_client'
 import type { Registry } from '../.adonisjs/client/registry/schema.d.ts'
+import { ensureTestDatabase } from './test_database.js'
 
 /**
  * This file is imported by the "bin/test.ts" entrypoint file
@@ -41,7 +42,19 @@ export const plugins: Config['plugins'] = [
  * The teardown functions are executed after all the tests
  */
 export const runnerHooks: Required<Pick<Config, 'setup' | 'teardown'>> = {
-  setup: [],
+  setup: [
+    async () => {
+      await ensureTestDatabase()
+
+      /**
+       * The rollback function `migrate()` returns is deliberately discarded: the schema
+       * stays between runs, so every run after the first one skips the migrations
+       * entirely. Data isolation is not this hook's job — each test wraps itself in a
+       * rolled-back global transaction.
+       */
+      await testUtils.db().migrate()
+    },
+  ],
   teardown: [],
 }
 

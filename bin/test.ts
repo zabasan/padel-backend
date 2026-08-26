@@ -12,9 +12,17 @@
 
 process.env.NODE_ENV = 'test'
 
+/**
+ * The suite always runs against its own database. Set here, before `#start/env` is
+ * imported inside the booting hook, so it wins over whatever `DB_DATABASE` the local
+ * `.env.test` carries (AdonisJS env files never override an existing process.env key).
+ */
+process.env.DB_DATABASE = TEST_DATABASE
+
 import 'reflect-metadata'
 import { Ignitor, prettyPrintError } from '@adonisjs/core'
 import { configure, processCLIArgs, run } from '@japa/runner'
+import { TEST_DATABASE } from '../tests/test_database.js'
 
 /**
  * URL to the application root. AdonisJS need it to resolve

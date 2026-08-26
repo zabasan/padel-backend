@@ -1,10 +1,12 @@
 // Shared fixture builders for the functional suite. NOT a *.spec.ts file, so Japa's
 // `tests/functional/**/*.spec.{ts,js}` glob never picks it up as a standalone test.
 //
-// IMPORTANT: `.env.test` points at the real dev database (no isolated test DB exists for
-// this project). Every functional test group MUST wrap each test in a rolled-back global
-// transaction via `group.each.setup(() => testUtils.db().withGlobalTransaction())` so
-// nothing written here ever survives past the test. Never rely on committed fixtures.
+// The suite runs against its own database (`padel_test`, created and migrated by
+// `tests/test_database.ts` — never the dev one). Even so, every functional test group
+// MUST wrap each test in a rolled-back global transaction via
+// `group.each.setup(() => testUtils.db().withGlobalTransaction())`: that is what keeps
+// tests from leaking into each other and what keeps the schema-only test database from
+// accumulating rows across runs. Never rely on committed fixtures.
 import hash from '@adonisjs/core/services/hash'
 import { DateTime } from 'luxon'
 import User from '#models/user'
@@ -244,8 +246,8 @@ export async function createFootballCourt(
   return court
 }
 
-// Pins the professor hour window. `.env.test` points at the real dev DB, where an admin may
-// have changed these, so any test asserting on the window must set it explicitly.
+// Pins the professor hour window. Settings are a persisted singleton, so a test asserting on
+// the window must set it explicitly instead of inheriting whatever value is on disk.
 export async function setProfessorHours(startHour: number, endHour: number): Promise<void> {
   await Setting.updateOrCreate(
     { key: 'professorStartHour' },
@@ -257,8 +259,8 @@ export async function setProfessorHours(startHour: number, endHour: number): Pro
   )
 }
 
-// Pins the professor class rates. Same reason as setProfessorHours: `.env.test` points at the
-// real dev DB, so any test asserting on a professor price must set it explicitly. Weekday and
+// Pins the professor class rates. Same reason as setProfessorHours: any test asserting on a
+// professor price must set it explicitly rather than inherit it. Weekday and
 // weekend individual rates default to the SAME value on purpose — a test about who may set a
 // price should not also depend on which weekday "tomorrow" happens to fall on. The weekend
 // surcharge itself is covered in tests/unit/weekend_surcharge.spec.ts.
@@ -420,10 +422,12 @@ export async function openCashSession(opener?: User, openingEfectivo = 0): Promi
  *
  * Por qué hace falta: `cash_sessions` tiene un índice UNIQUE sobre `open_marker` que
  * garantiza el invariante "nunca hay más de una sesión abierta". Esa restricción es
- * GLOBAL — ve las filas commiteadas fuera de la transacción del test — y `.env.test`
- * apunta a la base de dev REAL (ver el header de este archivo). Así que alcanza con que
- * alguien deje la caja abierta en la app para que ~100 tests fallen con
+ * GLOBAL: ve las filas commiteadas fuera de la transacción del test. Cuando la suite
+ * corría contra la base de dev, alcanzaba con que alguien dejara la caja abierta en la
+ * app para que ~100 tests fallaran con
  * `Duplicate entry '1' for key 'cash_sessions.cash_sessions_open_marker_unique'`.
+ * Con `padel_test` eso ya no puede pasar, pero el fixture se queda: fija la precondición
+ * explícitamente en vez de confiar en que la base esté limpia.
  *
  * Los demás fixtures conviven con la base compartida porque solo crean filas propias y
  * los tests afirman sobre deltas. La caja es lo primero que introduce un SINGLETON, y un

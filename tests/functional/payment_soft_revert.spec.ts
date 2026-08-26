@@ -21,8 +21,8 @@ import {
  * Estos tests fijan las dos mitades del invariante: la fila SOBREVIVE con su
  * `reverted_at`, y toda lectura de pagos vigentes la ignora.
  *
- * El grupo entero corre dentro de una transacción global revertida: `.env.test`
- * apunta a la base de dev real, así que nada de valores absolutos.
+ * El grupo entero corre dentro de una transacción global revertida, así que nada de
+ * lo que escribe sobrevive al test.
  */
 test.group('revertPayment — anula, no borra', (group) => {
   group.each.setup(() => testUtils.db().withGlobalTransaction())
