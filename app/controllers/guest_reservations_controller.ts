@@ -16,7 +16,10 @@ const guestReservationValidator = vine.compile(
     startTime: vine.string(),
     duration: vine.number().min(MIN_BOOKING_MINUTES).max(MAX_BOOKING_MINUTES),
     notes: vine.string().trim().optional(),
-    padelCategory: vine.enum(['C1','C2','C3','C4','C5','C6','C7','C8','C9'] as const).optional().nullable(),
+    padelCategory: vine
+      .enum(['C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'C7', 'C8', 'C9'] as const)
+      .optional()
+      .nullable(),
   })
 )
 
@@ -32,7 +35,9 @@ export default class GuestReservationsController {
       .first()
 
     if (user && (user.status ?? 'active') === 'inactive') {
-      return response.forbidden({ message: 'Tu cuenta está desactivada. Contactá al administrador.' })
+      return response.forbidden({
+        message: 'Tu cuenta está desactivada. Contactá al administrador.',
+      })
     }
 
     if (!user) {
@@ -47,8 +52,14 @@ export default class GuestReservationsController {
       })
     } else {
       let changed = false
-      if (!user.fullName) { user.fullName = fullName; changed = true }
-      if (padelCategory && !user.padelCategory) { user.padelCategory = padelCategory; changed = true }
+      if (!user.fullName) {
+        user.fullName = fullName
+        changed = true
+      }
+      if (padelCategory && !user.padelCategory) {
+        user.padelCategory = padelCategory
+        changed = true
+      }
       if (changed) await user.save()
     }
 
@@ -58,17 +69,14 @@ export default class GuestReservationsController {
     }
     const end = start.plus({ minutes: duration })
 
-    const court = await Court.query()
-      .where('id', courtId)
-      .preload('priceRanges')
-      .firstOrFail()
+    const court = await Court.query().where('id', courtId).preload('priceRanges').firstOrFail()
 
     // Basic conflict check
     const conflicts = await Reservation.query()
       .where('courtId', courtId)
       .whereNot('status', 'cancelled')
-      .where(q => {
-        q.where(q2 => {
+      .where((q) => {
+        q.where((q2) => {
           q2.where('startTime', '<', end.toSQL()!).where('endTime', '>', start.toSQL()!)
         })
       })

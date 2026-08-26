@@ -27,11 +27,14 @@ interface FakeReservation {
 
 // ─── Logic mirrors (same as controller revertPayment) ─────────────────────────
 
-function applyPaymentRevert(reservation: FakeReservation, paymentId: number): {
+function applyPaymentRevert(
+  reservation: FakeReservation,
+  paymentId: number
+): {
   reservation: FakeReservation
   auditOldValue: string
 } {
-  const payment = reservation.payments.find(p => p.id === paymentId)
+  const payment = reservation.payments.find((p) => p.id === paymentId)
   if (!payment) throw new Error('Payment not found')
 
   const auditOld = JSON.stringify({
@@ -43,7 +46,7 @@ function applyPaymentRevert(reservation: FakeReservation, paymentId: number): {
     occurrenceDate: payment.occurrenceDate ?? undefined,
   })
 
-  const updatedPayments = reservation.payments.filter(p => p.id !== paymentId)
+  const updatedPayments = reservation.payments.filter((p) => p.id !== paymentId)
   const updated = { ...reservation, payments: updatedPayments }
 
   if (payment.type === 'deposit') {
@@ -67,14 +70,22 @@ function applyPaymentRevert(reservation: FakeReservation, paymentId: number): {
 
 function paidOccurrenceDates(payments: FakePayment[]): string[] {
   return payments
-    .filter(p => p.type === 'total' && p.occurrenceDate != null)
-    .map(p => p.occurrenceDate!)
+    .filter((p) => p.type === 'total' && p.occurrenceDate != null)
+    .map((p) => p.occurrenceDate!)
 }
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
 function makeDeposit(id: number, occurrenceDate: string | null = null): FakePayment {
-  return { id, type: 'deposit', total: 5000, efectivo: 5000, transferencia: 0, postnet: 0, occurrenceDate }
+  return {
+    id,
+    type: 'deposit',
+    total: 5000,
+    efectivo: 5000,
+    transferencia: 0,
+    postnet: 0,
+    occurrenceDate,
+  }
 }
 
 function makeTotal(id: number, occurrenceDate: string | null = null, total = 10000): FakePayment {
@@ -153,7 +164,9 @@ test.group('revertPayment — total (único pago)', () => {
     assert.isEmpty(updated.payments)
   })
 
-  test('con totalPaidCount = 0 o undefined → totalPaid vuelve a false (no queda negativo)', ({ assert }) => {
+  test('con totalPaidCount = 0 o undefined → totalPaid vuelve a false (no queda negativo)', ({
+    assert,
+  }) => {
     const reservation = makeReservation({
       totalPaid: true,
       totalPaidCount: 0,
@@ -186,11 +199,10 @@ test.group('revertPayment — total (múltiples pagos recurrentes)', () => {
     assert.lengthOf(updated.payments, 2)
   })
 
-  test('REGRESIÓN: revertir el pago de una semana no afecta las otras ocurrencias pagas', ({ assert }) => {
-    const payments = [
-      makeTotal(30, '2026-07-03'),
-      makeTotal(31, '2026-07-10'),
-    ]
+  test('REGRESIÓN: revertir el pago de una semana no afecta las otras ocurrencias pagas', ({
+    assert,
+  }) => {
+    const payments = [makeTotal(30, '2026-07-03'), makeTotal(31, '2026-07-10')]
     const reservation = makeReservation({ totalPaid: true, totalPaidCount: 2, payments })
 
     // Revertir el pago del 3 de julio
@@ -203,7 +215,9 @@ test.group('revertPayment — total (múltiples pagos recurrentes)', () => {
 })
 
 test.group('revertPayment — audit log', () => {
-  test('el oldValue contiene tipo, monto, método y occurrenceDate del pago original', ({ assert }) => {
+  test('el oldValue contiene tipo, monto, método y occurrenceDate del pago original', ({
+    assert,
+  }) => {
     const payment = makeTotal(40, '2026-07-03', 8500)
     payment.efectivo = 3500
     payment.transferencia = 5000
@@ -234,11 +248,16 @@ test.group('revertPayment — audit log', () => {
 test.group('revertPayment — eliminación del payment del array', () => {
   test('el payment revertido desaparece del array de pagos', ({ assert }) => {
     const payments = [makeDeposit(60), makeTotal(61, '2026-07-03')]
-    const reservation = makeReservation({ depositPaid: true, totalPaid: true, totalPaidCount: 1, payments })
+    const reservation = makeReservation({
+      depositPaid: true,
+      totalPaid: true,
+      totalPaidCount: 1,
+      payments,
+    })
 
     const { reservation: updated } = applyPaymentRevert(reservation, 61)
 
-    assert.isFalse(updated.payments.some(p => p.id === 61))
-    assert.isTrue(updated.payments.some(p => p.id === 60))
+    assert.isFalse(updated.payments.some((p) => p.id === 61))
+    assert.isTrue(updated.payments.some((p) => p.id === 60))
   })
 })

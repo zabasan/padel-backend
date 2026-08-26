@@ -23,7 +23,9 @@ test.group('payTotal — streak advances on total payment', (group) => {
   group.each.setup(() => testUtils.db().withGlobalTransaction())
   // La caja tiene que estar abierta: middleware.cashRegister bloquea todo movimiento
   // de plata con 409 si no lo está. Va DESPUÉS de la transacción para revertirse con ella.
-  group.each.setup(async () => { await openCashSession() })
+  group.each.setup(async () => {
+    await openCashSession()
+  })
 
   test('total payment advances consecutiveGames by exactly one', async ({ client, assert }) => {
     const staff = await createStaff()
@@ -149,7 +151,9 @@ test.group('payTotal — charges the requested occurrence', (group) => {
   group.each.setup(() => testUtils.db().withGlobalTransaction())
   // La caja tiene que estar abierta: middleware.cashRegister bloquea todo movimiento
   // de plata con 409 si no lo está. Va DESPUÉS de la transacción para revertirse con ella.
-  group.each.setup(async () => { await openCashSession() })
+  group.each.setup(async () => {
+    await openCashSession()
+  })
 
   test('occurrence_date charges that past week instead of the next due one', async ({
     client,

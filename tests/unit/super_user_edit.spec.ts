@@ -3,12 +3,15 @@ import { DateTime } from 'luxon'
 
 // ─── Guard (mirrors reservations_controller.ts) ───────────────────────────────
 
-function canEditReservation(user: {
-  isSuperUser: boolean
-}, reservation: {
-  isRecurring: boolean
-  endTime: DateTime
-}): { allowed: boolean; reason?: string } {
+function canEditReservation(
+  user: {
+    isSuperUser: boolean
+  },
+  reservation: {
+    isRecurring: boolean
+    endTime: DateTime
+  }
+): { allowed: boolean; reason?: string } {
   if (!user.isSuperUser && !reservation.isRecurring && reservation.endTime < DateTime.now()) {
     return { allowed: false, reason: 'No se puede editar una reserva que ya ocurrió' }
   }

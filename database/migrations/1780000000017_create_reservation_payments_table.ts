@@ -10,7 +10,13 @@ export default class extends BaseSchema {
     // Create dedicated payments table — one row per payment event
     this.schema.createTable('reservation_payments', (table) => {
       table.increments('id')
-      table.integer('reservation_id').unsigned().notNullable().references('id').inTable('reservations').onDelete('CASCADE')
+      table
+        .integer('reservation_id')
+        .unsigned()
+        .notNullable()
+        .references('id')
+        .inTable('reservations')
+        .onDelete('CASCADE')
       table.enu('type', ['deposit', 'total']).notNullable()
       table.decimal('efectivo', 10, 2).notNullable().defaultTo(0)
       table.decimal('transferencia', 10, 2).notNullable().defaultTo(0)

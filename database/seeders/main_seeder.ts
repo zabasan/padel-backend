@@ -32,16 +32,52 @@ export default class extends BaseSeeder {
 
     // Create 3 padel courts
     const padelCourts = [
-      { name: 'Cancha Padel 1', type: 'padel' as const, description: 'Cancha de pádel con césped artificial', pricePerHour: 2000, isActive: true },
-      { name: 'Cancha Padel 2', type: 'padel' as const, description: 'Cancha de pádel techada', pricePerHour: 2500, isActive: true },
-      { name: 'Cancha Padel 3', type: 'padel' as const, description: 'Cancha de pádel premium con iluminación LED', pricePerHour: 3000, isActive: true },
+      {
+        name: 'Cancha Padel 1',
+        type: 'padel' as const,
+        description: 'Cancha de pádel con césped artificial',
+        pricePerHour: 2000,
+        isActive: true,
+      },
+      {
+        name: 'Cancha Padel 2',
+        type: 'padel' as const,
+        description: 'Cancha de pádel techada',
+        pricePerHour: 2500,
+        isActive: true,
+      },
+      {
+        name: 'Cancha Padel 3',
+        type: 'padel' as const,
+        description: 'Cancha de pádel premium con iluminación LED',
+        pricePerHour: 3000,
+        isActive: true,
+      },
     ]
 
     // Create 3 football courts
     const footballCourts = [
-      { name: 'Cancha Fútbol 1', type: 'football' as const, description: 'Cancha de fútbol 5 con césped sintético', pricePerHour: 3000, isActive: true },
-      { name: 'Cancha Fútbol 2', type: 'football' as const, description: 'Cancha de fútbol 7 al aire libre', pricePerHour: 4000, isActive: true },
-      { name: 'Cancha Fútbol 3', type: 'football' as const, description: 'Cancha de fútbol 11 con tribuna', pricePerHour: 6000, isActive: true },
+      {
+        name: 'Cancha Fútbol 1',
+        type: 'football' as const,
+        description: 'Cancha de fútbol 5 con césped sintético',
+        pricePerHour: 3000,
+        isActive: true,
+      },
+      {
+        name: 'Cancha Fútbol 2',
+        type: 'football' as const,
+        description: 'Cancha de fútbol 7 al aire libre',
+        pricePerHour: 4000,
+        isActive: true,
+      },
+      {
+        name: 'Cancha Fútbol 3',
+        type: 'football' as const,
+        description: 'Cancha de fútbol 11 con tribuna',
+        pricePerHour: 6000,
+        isActive: true,
+      },
     ]
 
     for (const courtData of [...padelCourts, ...footballCourts]) {

@@ -8,7 +8,10 @@ export const signupValidator = vine.compile(
     email: vine.string().email().trim().unique({ table: 'users', column: 'email' }),
     password: password(),
     phone: vine.string().trim().minLength(6).unique({ table: 'users', column: 'phone' }),
-    padelCategory: vine.enum(['C1','C2','C3','C4','C5','C6','C7','C8','C9'] as const).optional().nullable(),
+    padelCategory: vine
+      .enum(['C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'C7', 'C8', 'C9'] as const)
+      .optional()
+      .nullable(),
   })
 )
 

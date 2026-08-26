@@ -90,7 +90,9 @@ test.group('effectiveConsecutiveGames — past hidden date breaks the streak', (
     assert.equal(effectiveConsecutiveGames(SAT_RES, ['2026-05-30'], NOW), 1)
   })
 
-  test('most recent breaker wins; hidden 23/05 and 30/05 → only 06/06 after → streak = 1', ({ assert }) => {
+  test('most recent breaker wins; hidden 23/05 and 30/05 → only 06/06 after → streak = 1', ({
+    assert,
+  }) => {
     assert.equal(effectiveConsecutiveGames(SAT_RES, ['2026-05-23', '2026-05-30'], NOW), 1)
   })
 
@@ -113,7 +115,9 @@ test.group('effectiveConsecutiveGames — hidden date before lastIncrementedAt i
 })
 
 test.group('effectiveConsecutiveGames — no lastIncrementedAt (never played)', () => {
-  test('past hidden date with no prior increment counts streak from breaker forward', ({ assert }) => {
+  test('past hidden date with no prior increment counts streak from breaker forward', ({
+    assert,
+  }) => {
     // No lastIncrementedAt → hidden 23/05 is a valid breaker from start
     // After breaker: 30/05 ✓, 06/06 ✓ → streak = 2
     const res = makeRes({

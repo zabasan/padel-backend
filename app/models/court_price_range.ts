@@ -6,8 +6,8 @@ import Court from '#models/court'
 export default class CourtPriceRange extends BaseModel {
   @column({ isPrimary: true }) declare id: number
   @column() declare courtId: number
-  @column() declare startHour: number  // 0-23
-  @column() declare endHour: number    // 1-24
+  @column() declare startHour: number // 0-23
+  @column() declare endHour: number // 1-24
   @column() declare pricePerHour: number
   @column() declare isPeakHour: boolean
   @column() declare price60Min: number | null

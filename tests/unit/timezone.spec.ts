@@ -22,7 +22,12 @@ interface PriceRange {
 
 // These exercise the real production pricing service — do NOT reimplement it here.
 // A local copy is what let the midnight bugs survive a green suite.
-function calculatePadelPrice(ranges: PriceRange[], defaultPrice: number, start: DateTime, mins: number): number {
+function calculatePadelPrice(
+  ranges: PriceRange[],
+  defaultPrice: number,
+  start: DateTime,
+  mins: number
+): number {
   return calculateCourtPrice(
     { type: 'padel', pricePerHour: defaultPrice },
     ranges,
@@ -31,7 +36,12 @@ function calculatePadelPrice(ranges: PriceRange[], defaultPrice: number, start: 
   )
 }
 
-function calculateFootballPrice(ranges: PriceRange[], defaultPrice: number, start: DateTime, end: DateTime): number {
+function calculateFootballPrice(
+  ranges: PriceRange[],
+  defaultPrice: number,
+  start: DateTime,
+  end: DateTime
+): number {
   return calculateCourtPrice({ type: 'football', pricePerHour: defaultPrice }, ranges, start, end)
 }
 
@@ -50,21 +60,25 @@ interface FakeReservation {
   hiddenDates?: string[]
 }
 
-function hasRecurringConflict(reservations: FakeReservation[], startTime: DateTime, endTime: DateTime): boolean {
+function hasRecurringConflict(
+  reservations: FakeReservation[],
+  startTime: DateTime,
+  endTime: DateTime
+): boolean {
   const startART = startTime.setZone(ART_TZ)
-  const endART   = endTime.setZone(ART_TZ)
-  const startWD  = startART.weekday
+  const endART = endTime.setZone(ART_TZ)
+  const startWD = startART.weekday
   const startMin = timeInMinutes(startTime)
-  const endMin   = (endART.hour === 0 && endART.minute === 0) ? 24 * 60 : timeInMinutes(endTime)
+  const endMin = endART.hour === 0 && endART.minute === 0 ? 24 * 60 : timeInMinutes(endTime)
   const startISO = startART.toISODate()!
 
   for (const r of reservations) {
     const rStartART = r.startTime.setZone(ART_TZ)
-    const rEndART   = r.endTime.setZone(ART_TZ)
+    const rEndART = r.endTime.setZone(ART_TZ)
     if (rStartART.weekday !== startWD) continue
     if (startISO < rStartART.toISODate()!) continue
-    const rMin  = timeInMinutes(r.startTime)
-    const rEMin = (rEndART.hour === 0 && rEndART.minute === 0) ? 24 * 60 : timeInMinutes(r.endTime)
+    const rMin = timeInMinutes(r.startTime)
+    const rEMin = rEndART.hour === 0 && rEndART.minute === 0 ? 24 * 60 : timeInMinutes(r.endTime)
     if (startMin >= rEMin || endMin <= rMin) continue
     if ((r.hiddenDates ?? []).includes(startISO)) continue
     return true
@@ -74,17 +88,20 @@ function hasRecurringConflict(reservations: FakeReservation[], startTime: DateTi
 
 function statsDateRange(period: string, date: string) {
   const now = DateTime.now().setZone(ART_TZ)
-  let from: DateTime, to: DateTime
+  let from: DateTime
+  let to: DateTime
   if (period === 'day') {
     const d = date ? DateTime.fromISO(date, { zone: ART_TZ }) : now
-    from = d.startOf('day'); to = d.endOf('day')
+    from = d.startOf('day')
+    to = d.endOf('day')
   } else if (period === 'month') {
     const d = date ? DateTime.fromFormat(date, 'yyyy-MM', { zone: ART_TZ }) : now
-    from = d.startOf('month'); to = d.endOf('month')
+    from = d.startOf('month')
+    to = d.endOf('month')
   } else {
-    const y = date ? parseInt(date) : now.year
-    from = DateTime.fromObject({ year: y, month: 1,  day: 1  }, { zone: ART_TZ }).startOf('day')
-    to   = DateTime.fromObject({ year: y, month: 12, day: 31 }, { zone: ART_TZ }).endOf('day')
+    const y = date ? Number.parseInt(date) : now.year
+    from = DateTime.fromObject({ year: y, month: 1, day: 1 }, { zone: ART_TZ }).startOf('day')
+    to = DateTime.fromObject({ year: y, month: 12, day: 31 }, { zone: ART_TZ }).endOf('day')
   }
   return { fromSQL: from.toUTC().toSQL()!, toSQL: to.toUTC().toSQL()! }
 }
@@ -92,10 +109,10 @@ function statsDateRange(period: string, date: string) {
 function availabilityWindow(dateStr: string) {
   const d = DateTime.fromISO(dateStr, { zone: ART_TZ })
   return {
-    weekday:  d.weekday,
-    dateIso:  d.toISODate()!,
+    weekday: d.weekday,
+    dateIso: d.toISODate()!,
     startSQL: d.startOf('day').toUTC().toSQL()!,
-    endSQL:   d.endOf('day').toUTC().toSQL()!,
+    endSQL: d.endOf('day').toUTC().toSQL()!,
   }
 }
 
@@ -107,39 +124,47 @@ function nextOccurrenceWeekday(resStartUTC: DateTime, fromNowUTC: DateTime): str
 }
 
 function thisWeeksOccurrence(resStartUTC: DateTime, nowUTC: DateTime): DateTime {
-  const now    = nowUTC.setZone(ART_TZ)
-  const res    = resStartUTC.setZone(ART_TZ)
+  const now = nowUTC.setZone(ART_TZ)
+  const res = resStartUTC.setZone(ART_TZ)
   let occ = now.set({ hour: res.hour, minute: res.minute, second: 0, millisecond: 0 })
-  occ = occ.minus({ days: ((now.weekday - res.weekday + 7) % 7) })
+  occ = occ.minus({ days: (now.weekday - res.weekday + 7) % 7 })
   if (occ > now) occ = occ.minus({ weeks: 1 })
   return occ
 }
 
-function professorHoursOk(startUTC: DateTime, endUTC: DateTime, profStart: number, profEnd: number): boolean {
+function professorHoursOk(
+  startUTC: DateTime,
+  endUTC: DateTime,
+  profStart: number,
+  profEnd: number
+): boolean {
   const s = startUTC.setZone(ART_TZ)
   const e = endUTC.setZone(ART_TZ)
-  return (s.hour + s.minute / 60) >= profStart && (e.hour + e.minute / 60) <= profEnd
+  return s.hour + s.minute / 60 >= profStart && e.hour + e.minute / 60 <= profEnd
 }
 
 // inART (mirrors NewReservationModal.jsx using Luxon)
 function inART(iso: string) {
   const dt = DateTime.fromISO(iso, { setZone: true }).setZone(ART_TZ)
   return {
-    hours:     dt.hour,
-    minutes:   dt.minute,
-    dateStr:   dt.toISODate()!,
+    hours: dt.hour,
+    minutes: dt.minute,
+    dateStr: dt.toISODate()!,
     dayOfWeek: dt.weekday % 7,
   }
 }
 
-function computeOccupiedRanges(reservations: { id: number; status: string; startTime: string; endTime: string }[], excludeId: number | null = null) {
+function computeOccupiedRanges(
+  reservations: { id: number; status: string; startTime: string; endTime: string }[],
+  excludeId: number | null = null
+) {
   return reservations
-    .filter(r => r.status !== 'cancelled' && (excludeId == null || r.id !== excludeId))
-    .map(r => {
+    .filter((r) => r.status !== 'cancelled' && (excludeId == null || r.id !== excludeId))
+    .map((r) => {
       const s = inART(r.startTime)
       const e = inART(r.endTime)
       const sMin = s.hours * 60 + s.minutes
-      let eMin   = e.hours * 60 + e.minutes
+      let eMin = e.hours * 60 + e.minutes
       if (s.dateStr !== e.dateStr) eMin += 24 * 60
       return [sMin, eMin] as [number, number]
     })
@@ -153,9 +178,12 @@ function buildDateTime(dateStr: string, slot: string): string {
   return `${dateStr}T${slot}:00-03:00`
 }
 
-function expandRecurringForDate(reservation: { id: number; startTime: string; endTime: string; hiddenDates: string[] }, targetDateStr: string) {
-  const base      = inART(reservation.startTime)
-  const baseEnd   = inART(reservation.endTime)
+function expandRecurringForDate(
+  reservation: { id: number; startTime: string; endTime: string; hiddenDates: string[] },
+  targetDateStr: string
+) {
+  const base = inART(reservation.startTime)
+  const baseEnd = inART(reservation.endTime)
   const targetDay = inART(targetDateStr + 'T12:00:00-03:00').dayOfWeek
   if (base.dayOfWeek !== targetDay) return null
   if (reservation.hiddenDates.includes(targetDateStr)) return null
@@ -164,13 +192,13 @@ function expandRecurringForDate(reservation: { id: number; startTime: string; en
     ...reservation,
     id: `${reservation.id}-${targetDateStr}`,
     startTime: `${targetDateStr}T${pad(base.hours)}:${pad(base.minutes)}:00.000-03:00`,
-    endTime:   `${targetDateStr}T${pad(baseEnd.hours)}:${pad(baseEnd.minutes)}:00.000-03:00`,
+    endTime: `${targetDateStr}T${pad(baseEnd.hours)}:${pad(baseEnd.minutes)}:00.000-03:00`,
   }
 }
 
 function getNextOccurrenceDate(startISO: string, hiddenDates: string[] = []): string {
   const targetDay = inART(startISO).dayOfWeek
-  const hidden    = new Set(hiddenDates)
+  const hidden = new Set(hiddenDates)
   let next = DateTime.now().setZone(ART_TZ).startOf('day').plus({ days: 1 })
   while (next.weekday % 7 !== targetDay) next = next.plus({ days: 1 })
   while (hidden.has(next.toISODate()!)) next = next.plus({ weeks: 1 })
@@ -180,19 +208,32 @@ function getNextOccurrenceDate(startISO: string, hiddenDates: string[] = []): st
 // ─── Test data ────────────────────────────────────────────────────────────────
 
 const padelRanges: PriceRange[] = [
-  { startHour: 8,  endHour: 20, price60Min: 22000, price90Min: 33000, price120Min: 44000, pricePerHour: 22000 },
-  { startHour: 20, endHour: 24, price60Min: 27000, price90Min: 40500, price120Min: 54000, pricePerHour: 27000 },
+  {
+    startHour: 8,
+    endHour: 20,
+    price60Min: 22000,
+    price90Min: 33000,
+    price120Min: 44000,
+    pricePerHour: 22000,
+  },
+  {
+    startHour: 20,
+    endHour: 24,
+    price60Min: 27000,
+    price90Min: 40500,
+    price120Min: 54000,
+    pricePerHour: 27000,
+  },
 ]
 
 const footballRanges: PriceRange[] = [
-  { startHour: 8,  endHour: 22, pricePerHour: 22000 },
+  { startHour: 8, endHour: 22, pricePerHour: 22000 },
   { startHour: 22, endHour: 24, pricePerHour: 30000 },
 ]
 
 const art = (y: number, mo: number, d: number, h: number, mi = 0) =>
   DateTime.fromObject({ year: y, month: mo, day: d, hour: h, minute: mi }, { zone: ART_TZ })
-const artUTC = (y: number, mo: number, d: number, h: number, mi = 0) =>
-  art(y, mo, d, h, mi).toUTC()
+const artUTC = (y: number, mo: number, d: number, h: number, mi = 0) => art(y, mo, d, h, mi).toUTC()
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
@@ -232,8 +273,8 @@ test.group('Timezone — calculatePadelPrice', () => {
 
   test('10:00 ART 60/90/120min → daytime prices', ({ assert }) => {
     const start = artUTC(2026, 6, 5, 10)
-    assert.equal(calculatePadelPrice(padelRanges, 22000, start, 60),  22000)
-    assert.equal(calculatePadelPrice(padelRanges, 22000, start, 90),  33000)
+    assert.equal(calculatePadelPrice(padelRanges, 22000, start, 60), 22000)
+    assert.equal(calculatePadelPrice(padelRanges, 22000, start, 90), 33000)
     assert.equal(calculatePadelPrice(padelRanges, 22000, start, 120), 44000)
   })
 
@@ -272,7 +313,15 @@ test.group('Timezone — calculatePadelPrice', () => {
 
 test.group('Timezone — calculateFootballPrice', () => {
   test('22:30-00:00 ART → midnight maps to endH=24, 1.5h × 30000 = 45000', ({ assert }) => {
-    assert.equal(calculateFootballPrice(footballRanges, 22000, artUTC(2026, 6, 5, 22, 30), artUTC(2026, 6, 6, 0, 0)), 45000)
+    assert.equal(
+      calculateFootballPrice(
+        footballRanges,
+        22000,
+        artUTC(2026, 6, 5, 22, 30),
+        artUTC(2026, 6, 6, 0, 0)
+      ),
+      45000
+    )
   })
 
   test('midnight end is detected as 00:00 in ART', ({ assert }) => {
@@ -281,30 +330,53 @@ test.group('Timezone — calculateFootballPrice', () => {
   })
 
   test('10:00-12:00 ART → 2h × 22000 = 44000', ({ assert }) => {
-    assert.equal(calculateFootballPrice(footballRanges, 22000, artUTC(2026, 6, 5, 10), artUTC(2026, 6, 5, 12)), 44000)
+    assert.equal(
+      calculateFootballPrice(footballRanges, 22000, artUTC(2026, 6, 5, 10), artUTC(2026, 6, 5, 12)),
+      44000
+    )
   })
 
   test('21:00-23:00 ART crosses ranges → pricier rate for the whole booking', ({ assert }) => {
     // starts at 22000/h, finishes at 30000/h → 30000 × 2h
-    assert.equal(calculateFootballPrice(footballRanges, 22000, artUTC(2026, 6, 5, 21), artUTC(2026, 6, 5, 23)), 60000)
+    assert.equal(
+      calculateFootballPrice(footballRanges, 22000, artUTC(2026, 6, 5, 21), artUTC(2026, 6, 5, 23)),
+      60000
+    )
   })
 
   test('23:00 + 60min ends exactly at midnight → 30000', ({ assert }) => {
-    assert.equal(calculateFootballPrice(footballRanges, 22000, artUTC(2026, 6, 5, 23), artUTC(2026, 6, 6, 0)), 30000)
+    assert.equal(
+      calculateFootballPrice(footballRanges, 22000, artUTC(2026, 6, 5, 23), artUTC(2026, 6, 6, 0)),
+      30000
+    )
   })
 
   test('23:00 + 90min runs past midnight → 1.5h × 30000, never 0', ({ assert }) => {
-    assert.equal(calculateFootballPrice(footballRanges, 22000, artUTC(2026, 6, 5, 23), artUTC(2026, 6, 6, 0, 30)), 45000)
+    assert.equal(
+      calculateFootballPrice(
+        footballRanges,
+        22000,
+        artUTC(2026, 6, 5, 23),
+        artUTC(2026, 6, 6, 0, 30)
+      ),
+      45000
+    )
   })
 
   test('23:00 + 120min runs past midnight → 2h × 30000, never negative', ({ assert }) => {
-    assert.equal(calculateFootballPrice(footballRanges, 22000, artUTC(2026, 6, 5, 23), artUTC(2026, 6, 6, 1)), 60000)
+    assert.equal(
+      calculateFootballPrice(footballRanges, 22000, artUTC(2026, 6, 5, 23), artUTC(2026, 6, 6, 1)),
+      60000
+    )
   })
 
   test('a configured after-midnight range prices the tail when pricier', ({ assert }) => {
     const withLateNight = [...footballRanges, { startHour: 0, endHour: 4, pricePerHour: 40000 }]
     // 23:00-01:00 starts at 30000/h, finishes inside the 40000/h range → 40000 × 2h
-    assert.equal(calculateFootballPrice(withLateNight, 22000, artUTC(2026, 6, 5, 23), artUTC(2026, 6, 6, 1)), 80000)
+    assert.equal(
+      calculateFootballPrice(withLateNight, 22000, artUTC(2026, 6, 5, 23), artUTC(2026, 6, 6, 1)),
+      80000
+    )
   })
 })
 
@@ -367,7 +439,11 @@ test.group('Timezone — timeInMinutes', () => {
 })
 
 test.group('Timezone — hasRecurringConflict', () => {
-  const mkRes = (startART: DateTime, endART: DateTime, hiddenDates: string[] = []): FakeReservation => ({
+  const mkRes = (
+    startART: DateTime,
+    endART: DateTime,
+    hiddenDates: string[] = []
+  ): FakeReservation => ({
     startTime: startART.toUTC(),
     endTime: endART.toUTC(),
     hiddenDates,
@@ -375,52 +451,74 @@ test.group('Timezone — hasRecurringConflict', () => {
 
   test('same weekday + overlapping time → conflict', ({ assert }) => {
     const existing = mkRes(art(2026, 5, 29, 22), art(2026, 5, 29, 23, 30))
-    assert.isTrue(hasRecurringConflict([existing], artUTC(2026, 6, 5, 22), artUTC(2026, 6, 5, 23, 30)))
+    assert.isTrue(
+      hasRecurringConflict([existing], artUTC(2026, 6, 5, 22), artUTC(2026, 6, 5, 23, 30))
+    )
   })
 
   test('different weekday → no conflict', ({ assert }) => {
     const existing = mkRes(art(2026, 5, 29, 22), art(2026, 5, 29, 23, 30))
-    assert.isFalse(hasRecurringConflict([existing], artUTC(2026, 6, 6, 22), artUTC(2026, 6, 6, 23, 30)))
+    assert.isFalse(
+      hasRecurringConflict([existing], artUTC(2026, 6, 6, 22), artUTC(2026, 6, 6, 23, 30))
+    )
   })
 
   test('same weekday, non-overlapping time → no conflict', ({ assert }) => {
     const existing = mkRes(art(2026, 5, 29, 22), art(2026, 5, 29, 23, 30))
-    assert.isFalse(hasRecurringConflict([existing], artUTC(2026, 6, 5, 23, 30), artUTC(2026, 6, 6, 0, 30)))
+    assert.isFalse(
+      hasRecurringConflict([existing], artUTC(2026, 6, 5, 23, 30), artUTC(2026, 6, 6, 0, 30))
+    )
   })
 
   test('partial overlap → conflict', ({ assert }) => {
     const existing = mkRes(art(2026, 5, 29, 22), art(2026, 5, 29, 23, 30))
-    assert.isTrue(hasRecurringConflict([existing], artUTC(2026, 6, 5, 22, 45), artUTC(2026, 6, 6, 0)))
+    assert.isTrue(
+      hasRecurringConflict([existing], artUTC(2026, 6, 5, 22, 45), artUTC(2026, 6, 6, 0))
+    )
   })
 
   test('date in hiddenDates → conflict skipped', ({ assert }) => {
     const existing = mkRes(art(2026, 5, 29, 22), art(2026, 5, 29, 23, 30), ['2026-06-05'])
-    assert.isFalse(hasRecurringConflict([existing], artUTC(2026, 6, 5, 22), artUTC(2026, 6, 5, 23, 30)))
+    assert.isFalse(
+      hasRecurringConflict([existing], artUTC(2026, 6, 5, 22), artUTC(2026, 6, 5, 23, 30))
+    )
   })
 
   test('new booking before existing start date → no conflict', ({ assert }) => {
     const existing = mkRes(art(2026, 5, 29, 22), art(2026, 5, 29, 23, 30))
-    assert.isFalse(hasRecurringConflict([existing], artUTC(2026, 5, 22, 22), artUTC(2026, 5, 22, 23, 30)))
+    assert.isFalse(
+      hasRecurringConflict([existing], artUTC(2026, 5, 22, 22), artUTC(2026, 5, 22, 23, 30))
+    )
   })
 
-  test('late-night ART booking: UTC weekday creates false-positives, ART weekday prevents them', ({ assert }) => {
+  test('late-night ART booking: UTC weekday creates false-positives, ART weekday prevents them', ({
+    assert,
+  }) => {
     // Existing recurring: Friday 22:00 ART → Saturday 01:00 UTC (weekday 6)
     // New booking: Saturday 10:00 ART → Saturday 13:00 UTC (weekday 6)
     // UTC weekday check: 6 == 6 → would wrongly consider them the same day
     // ART weekday check: Friday(5) != Saturday(6) → correctly different days
     const fridayNight = mkRes(art(2026, 5, 29, 22), art(2026, 5, 29, 23, 30))
-    const fridayNightUTCWeekday  = fridayNight.startTime.toUTC().weekday    // 6 (Saturday UTC)
-    const saturdayDayUTCWeekday  = artUTC(2026, 5, 30, 10).weekday          // also 6 (Saturday UTC)
-    const fridayNightARTWeekday  = fridayNight.startTime.setZone(ART_TZ).weekday  // 5 (Friday ART)
-    const saturdayDayARTWeekday  = artUTC(2026, 5, 30, 10).setZone(ART_TZ).weekday // 6 (Saturday ART)
+    const fridayNightUTCWeekday = fridayNight.startTime.toUTC().weekday // 6 (Saturday UTC)
+    const saturdayDayUTCWeekday = artUTC(2026, 5, 30, 10).weekday // also 6 (Saturday UTC)
+    const fridayNightARTWeekday = fridayNight.startTime.setZone(ART_TZ).weekday // 5 (Friday ART)
+    const saturdayDayARTWeekday = artUTC(2026, 5, 30, 10).setZone(ART_TZ).weekday // 6 (Saturday ART)
 
-    assert.equal(fridayNightUTCWeekday, saturdayDayUTCWeekday,
-      'UTC weekdays are the same (6) → would cause false-positive conflict')
-    assert.notEqual(fridayNightARTWeekday, saturdayDayARTWeekday,
-      'ART weekdays differ (5 vs 6) → correctly detected as different days')
+    assert.equal(
+      fridayNightUTCWeekday,
+      saturdayDayUTCWeekday,
+      'UTC weekdays are the same (6) → would cause false-positive conflict'
+    )
+    assert.notEqual(
+      fridayNightARTWeekday,
+      saturdayDayARTWeekday,
+      'ART weekdays differ (5 vs 6) → correctly detected as different days'
+    )
 
     // The conflict checker using ART weekday correctly returns no conflict
-    assert.isFalse(hasRecurringConflict([fridayNight], artUTC(2026, 5, 30, 10), artUTC(2026, 5, 30, 11, 30)))
+    assert.isFalse(
+      hasRecurringConflict([fridayNight], artUTC(2026, 5, 30, 10), artUTC(2026, 5, 30, 11, 30))
+    )
   })
 })
 
@@ -428,19 +526,19 @@ test.group('Timezone — stats date ranges → UTC SQL', () => {
   test('day: 2026-06-05 ART → from=03:00 UTC, to=next day 02:59 UTC', ({ assert }) => {
     const { fromSQL, toSQL } = statsDateRange('day', '2026-06-05')
     assert.isTrue(fromSQL.startsWith('2026-06-05 03:00:00'), `got "${fromSQL}"`)
-    assert.isTrue(toSQL.startsWith('2026-06-06 02:59:59'),   `got "${toSQL}"`)
+    assert.isTrue(toSQL.startsWith('2026-06-06 02:59:59'), `got "${toSQL}"`)
   })
 
   test('month: 2026-06 ART → from=Jun 1 03:00 UTC, to=Jul 1 02:59 UTC', ({ assert }) => {
     const { fromSQL, toSQL } = statsDateRange('month', '2026-06')
     assert.isTrue(fromSQL.startsWith('2026-06-01 03:00:00'), `got "${fromSQL}"`)
-    assert.isTrue(toSQL.startsWith('2026-07-01 02:59:59'),   `got "${toSQL}"`)
+    assert.isTrue(toSQL.startsWith('2026-07-01 02:59:59'), `got "${toSQL}"`)
   })
 
   test('year: 2026 ART → from=Jan 1 03:00 UTC, to=Jan 1 2027 02:59 UTC', ({ assert }) => {
     const { fromSQL, toSQL } = statsDateRange('year', '2026')
     assert.isTrue(fromSQL.startsWith('2026-01-01 03:00:00'), `got "${fromSQL}"`)
-    assert.isTrue(toSQL.startsWith('2027-01-01 02:59:59'),   `got "${toSQL}"`)
+    assert.isTrue(toSQL.startsWith('2027-01-01 02:59:59'), `got "${toSQL}"`)
   })
 })
 
@@ -450,7 +548,7 @@ test.group('Timezone — availability window', () => {
     assert.equal(w.weekday, 5)
     assert.equal(w.dateIso, '2026-06-05')
     assert.isTrue(w.startSQL.startsWith('2026-06-05 03:00:00'), `startSQL got "${w.startSQL}"`)
-    assert.isTrue(w.endSQL.startsWith('2026-06-06 02:59:59'),   `endSQL got "${w.endSQL}"`)
+    assert.isTrue(w.endSQL.startsWith('2026-06-06 02:59:59'), `endSQL got "${w.endSQL}"`)
   })
 
   test('2026-06-06 → Saturday weekday=6', ({ assert }) => {
@@ -462,9 +560,9 @@ test.group('Timezone — availability window', () => {
 
 test.group('Timezone — hideOccurrence next-weekday finder', () => {
   test('Friday recurring: next occurrence from Wednesday is Friday', ({ assert }) => {
-    const resStart = artUTC(2026, 5, 29, 22)   // Friday
-    const now      = artUTC(2026, 6, 3, 10)    // Wednesday
-    const next     = nextOccurrenceWeekday(resStart, now)
+    const resStart = artUTC(2026, 5, 29, 22) // Friday
+    const now = artUTC(2026, 6, 3, 10) // Wednesday
+    const next = nextOccurrenceWeekday(resStart, now)
     assert.equal(next, '2026-06-05')
     assert.equal(DateTime.fromISO(next, { zone: ART_TZ }).weekday, 5)
   })
@@ -472,7 +570,11 @@ test.group('Timezone — hideOccurrence next-weekday finder', () => {
   test('late-night Friday (=Saturday UTC): next occurrence is still Saturday ART', ({ assert }) => {
     // Reservation every Saturday 22:30 ART (Fri 22:30 = Sat UTC would be wrong)
     const resStart = artUTC(2026, 5, 30, 22, 30) // Saturday ART
-    assert.notEqual(resStart.weekday, resStart.setZone(ART_TZ).weekday, 'UTC weekday != ART weekday')
+    assert.notEqual(
+      resStart.weekday,
+      resStart.setZone(ART_TZ).weekday,
+      'UTC weekday != ART weekday'
+    )
     const next = nextOccurrenceWeekday(resStart, artUTC(2026, 6, 1, 10))
     assert.equal(DateTime.fromISO(next, { zone: ART_TZ }).weekday, 6, 'Saturday (6) in ART')
   })
@@ -544,21 +646,45 @@ test.group('Timezone — Frontend inART helper', () => {
 test.group('Timezone — Frontend computeOccupiedRanges', () => {
   test('cancelled reservation excluded', ({ assert }) => {
     const res = [
-      { id: 1, status: 'confirmed', startTime: '2026-06-05T22:00:00-03:00', endTime: '2026-06-05T23:30:00-03:00' },
-      { id: 2, status: 'cancelled', startTime: '2026-06-05T10:00:00-03:00', endTime: '2026-06-05T11:00:00-03:00' },
+      {
+        id: 1,
+        status: 'confirmed',
+        startTime: '2026-06-05T22:00:00-03:00',
+        endTime: '2026-06-05T23:30:00-03:00',
+      },
+      {
+        id: 2,
+        status: 'cancelled',
+        startTime: '2026-06-05T10:00:00-03:00',
+        endTime: '2026-06-05T11:00:00-03:00',
+      },
     ]
     assert.lengthOf(computeOccupiedRanges(res), 1)
   })
 
   test('22:00-23:30 ART → [1320, 1410]', ({ assert }) => {
-    const res = [{ id: 1, status: 'confirmed', startTime: '2026-06-05T22:00:00-03:00', endTime: '2026-06-05T23:30:00-03:00' }]
+    const res = [
+      {
+        id: 1,
+        status: 'confirmed',
+        startTime: '2026-06-05T22:00:00-03:00',
+        endTime: '2026-06-05T23:30:00-03:00',
+      },
+    ]
     const [[s, e]] = computeOccupiedRanges(res)
     assert.equal(s, 1320)
     assert.equal(e, 1410)
   })
 
   test('midnight-crossing 23:00-01:00 ART → [1380, 1500]', ({ assert }) => {
-    const res = [{ id: 1, status: 'confirmed', startTime: '2026-06-05T23:00:00-03:00', endTime: '2026-06-06T01:00:00-03:00' }]
+    const res = [
+      {
+        id: 1,
+        status: 'confirmed',
+        startTime: '2026-06-05T23:00:00-03:00',
+        endTime: '2026-06-06T01:00:00-03:00',
+      },
+    ]
     const [[s, e]] = computeOccupiedRanges(res)
     assert.equal(s, 1380)
     assert.equal(e, 1500)
@@ -583,7 +709,7 @@ test.group('Timezone — Frontend expandReservations', () => {
     isRecurring: true,
     status: 'confirmed',
     startTime: '2026-05-29T22:30:00-03:00',
-    endTime:   '2026-05-29T23:30:00-03:00',
+    endTime: '2026-05-29T23:30:00-03:00',
     hiddenDates: [] as string[],
   }
 
@@ -598,11 +724,18 @@ test.group('Timezone — Frontend expandReservations', () => {
   })
 
   test('hidden date suppresses occurrence', ({ assert }) => {
-    assert.isNull(expandRecurringForDate({ ...fridayRec, hiddenDates: ['2026-06-05'] }, '2026-06-05'))
+    assert.isNull(
+      expandRecurringForDate({ ...fridayRec, hiddenDates: ['2026-06-05'] }, '2026-06-05')
+    )
   })
 
   test('Saturday 22:30 recurring expands on next Saturday, not Friday', ({ assert }) => {
-    const satRec = { ...fridayRec, id: 99, startTime: '2026-05-30T22:30:00-03:00', endTime: '2026-05-31T00:00:00-03:00' }
+    const satRec = {
+      ...fridayRec,
+      id: 99,
+      startTime: '2026-05-30T22:30:00-03:00',
+      endTime: '2026-05-31T00:00:00-03:00',
+    }
     assert.isNull(expandRecurringForDate(satRec, '2026-06-05'), 'Friday → null')
     const occ = expandRecurringForDate(satRec, '2026-06-06')
     assert.isNotNull(occ)

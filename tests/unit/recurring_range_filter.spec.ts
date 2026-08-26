@@ -43,8 +43,16 @@ const dayRange = (isoDate: string) => ({
   to: `${isoDate}T23:59:59-03:00`,
 })
 
-const recurring = (id: number, start: DateTime): FakeRow => ({ id, isRecurring: true, startTime: start })
-const oneOff = (id: number, start: DateTime): FakeRow => ({ id, isRecurring: false, startTime: start })
+const recurring = (id: number, start: DateTime): FakeRow => ({
+  id,
+  isRecurring: true,
+  startTime: start,
+})
+const oneOff = (id: number, start: DateTime): FakeRow => ({
+  id,
+  isRecurring: false,
+  startTime: start,
+})
 
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
@@ -58,7 +66,10 @@ test.group('weekdaysInARTRange', () => {
 
   test('a full week yields all seven weekdays', ({ assert }) => {
     const set = weekdaysInARTRange('2026-06-29T00:00:00-03:00', '2026-07-05T23:59:59-03:00')
-    assert.deepEqual([...set!].sort((a, b) => a - b), [1, 2, 3, 4, 5, 6, 7])
+    assert.deepEqual(
+      [...set!].sort((a, b) => a - b),
+      [1, 2, 3, 4, 5, 6, 7]
+    )
   })
 
   test('open range (missing bound) returns null → keep everything', ({ assert }) => {
@@ -72,7 +83,10 @@ test.group('filterRecurringByRange — single day view', () => {
 
   test('keeps a recurring series whose weekday matches the day', ({ assert }) => {
     const rows = [recurring(1, artUTC(2026, 6, 24, 19))] // a Wednesday 19:00 ART
-    assert.deepEqual(filterRecurringByRange(rows, from, to).map(r => r.id), [1])
+    assert.deepEqual(
+      filterRecurringByRange(rows, from, to).map((r) => r.id),
+      [1]
+    )
   })
 
   test('drops a recurring series whose weekday does NOT match the day', ({ assert }) => {
@@ -82,7 +96,10 @@ test.group('filterRecurringByRange — single day view', () => {
 
   test('always keeps non-recurring rows (already date-bounded by SQL)', ({ assert }) => {
     const rows = [oneOff(3, artUTC(2026, 6, 26, 19))] // Friday one-off still passes through
-    assert.deepEqual(filterRecurringByRange(rows, from, to).map(r => r.id), [3])
+    assert.deepEqual(
+      filterRecurringByRange(rows, from, to).map((r) => r.id),
+      [3]
+    )
   })
 
   test('mixed set: only the matching recurring + all one-offs survive', ({ assert }) => {
@@ -91,20 +108,33 @@ test.group('filterRecurringByRange — single day view', () => {
       recurring(2, artUTC(2026, 6, 26, 19)), // Fri → drop
       oneOff(3, artUTC(2026, 7, 1, 20)), // one-off → keep
     ]
-    assert.deepEqual(filterRecurringByRange(rows, from, to).map(r => r.id), [1, 3])
+    assert.deepEqual(
+      filterRecurringByRange(rows, from, to).map((r) => r.id),
+      [1, 3]
+    )
   })
 
   test('an open range keeps recurring rows of any weekday', ({ assert }) => {
     const rows = [recurring(2, artUTC(2026, 6, 26, 19))] // Friday
-    assert.deepEqual(filterRecurringByRange(rows, undefined, undefined).map(r => r.id), [2])
+    assert.deepEqual(
+      filterRecurringByRange(rows, undefined, undefined).map((r) => r.id),
+      [2]
+    )
   })
 })
 
 test.group('filterRecurringByRange — week view keeps every weekday', () => {
   test('a Friday fija is kept when viewing a full week', ({ assert }) => {
     const rows = [recurring(2, artUTC(2026, 6, 26, 19))] // Friday
-    const kept = filterRecurringByRange(rows, '2026-06-29T00:00:00-03:00', '2026-07-05T23:59:59-03:00')
-    assert.deepEqual(kept.map(r => r.id), [2])
+    const kept = filterRecurringByRange(
+      rows,
+      '2026-06-29T00:00:00-03:00',
+      '2026-07-05T23:59:59-03:00'
+    )
+    assert.deepEqual(
+      kept.map((r) => r.id),
+      [2]
+    )
   })
 })
 
@@ -120,7 +150,10 @@ test.group('filterRecurringByRange — timezone edge (late-night Friday)', () =>
 
   test('REGRESSION: kept on the Friday view (matching ART weekday)', ({ assert }) => {
     const { from, to } = dayRange('2026-07-03') // Friday
-    assert.deepEqual(filterRecurringByRange([recurring(9, lateFriday)], from, to).map(r => r.id), [9])
+    assert.deepEqual(
+      filterRecurringByRange([recurring(9, lateFriday)], from, to).map((r) => r.id),
+      [9]
+    )
   })
 
   test('REGRESSION: dropped on the Saturday view (does not leak to UTC weekday)', ({ assert }) => {

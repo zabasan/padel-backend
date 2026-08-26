@@ -10,14 +10,16 @@ export default class CompleteProfileController {
     }
 
     const data = await request.validateUsing(
-      vine.compile(vine.object({
-        password: vine.string().minLength(6),
-        email: vine.string().email().optional(),
-      })),
+      vine.compile(
+        vine.object({
+          password: vine.string().minLength(6),
+          email: vine.string().email().optional(),
+        })
+      ),
       {
         messagesProvider: new SimpleMessagesProvider({
-          'minLength': 'La contraseña debe tener al menos 6 caracteres',
-          'email': 'El email no tiene un formato válido',
+          minLength: 'La contraseña debe tener al menos 6 caracteres',
+          email: 'El email no tiene un formato válido',
         }),
       }
     )

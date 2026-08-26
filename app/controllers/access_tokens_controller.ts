@@ -19,12 +19,13 @@ export default class AccessTokensController {
 
     if (!user && digitsOnly) {
       const allUsers = await User.all()
-      user = allUsers.find(u => {
-        if (!u.phone) return false
-        const storedDigits = u.phone.replace(/\D/g, '')
-        // Match if one ends with the other (handles country code prefix)
-        return storedDigits.endsWith(digitsOnly) || digitsOnly.endsWith(storedDigits)
-      }) || null
+      user =
+        allUsers.find((u) => {
+          if (!u.phone) return false
+          const storedDigits = u.phone.replace(/\D/g, '')
+          // Match if one ends with the other (handles country code prefix)
+          return storedDigits.endsWith(digitsOnly) || digitsOnly.endsWith(storedDigits)
+        }) || null
     }
 
     if (!user) {
@@ -33,7 +34,8 @@ export default class AccessTokensController {
 
     // For customer role check: also use suffix matching
     const phoneDigits = user.phone ? user.phone.replace(/\D/g, '') : ''
-    const phoneMatches = digitsOnly.length > 0 &&
+    const phoneMatches =
+      digitsOnly.length > 0 &&
       (phoneDigits.endsWith(digitsOnly) || digitsOnly.endsWith(phoneDigits))
 
     if (user.role === 'customer') {
@@ -59,7 +61,9 @@ export default class AccessTokensController {
     }
 
     if ((user.status ?? 'active') === 'inactive') {
-      throw new errors.E_INVALID_CREDENTIALS('Tu cuenta está desactivada. Contactá al administrador.')
+      throw new errors.E_INVALID_CREDENTIALS(
+        'Tu cuenta está desactivada. Contactá al administrador.'
+      )
     }
 
     const token = await User.accessTokens.create(user)

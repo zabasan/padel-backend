@@ -33,8 +33,11 @@ function computeCarryBalance(payments: FakePayment[]): number {
   return Math.round(saldo * 100) / 100
 }
 
-const payFull = (total: number, expectedAmount: number | null, occurrenceDate: unknown = '2026-07-03'): FakePayment =>
-  ({ type: 'total', occurrenceDate, total, expectedAmount })
+const payFull = (
+  total: number,
+  expectedAmount: number | null,
+  occurrenceDate: unknown = '2026-07-03'
+): FakePayment => ({ type: 'total', occurrenceDate, total, expectedAmount })
 
 // Mirrors reservations_controller.index: only TOTAL payments with an occurrence_date
 // contribute to the per-occurrence paid set (deposit is series-level, not per occurrence).
@@ -61,7 +64,11 @@ function nextOccurrenceDate(resStartUTC: DateTime, fromUTC: DateTime): string {
 }
 
 // Mirrors the list-page `obj.totalPaid`: is the NEXT occurrence paid?
-function nextOccurrenceTotalPaid(payments: FakePayment[], resStartUTC: DateTime, fromUTC: DateTime): boolean {
+function nextOccurrenceTotalPaid(
+  payments: FakePayment[],
+  resStartUTC: DateTime,
+  fromUTC: DateTime
+): boolean {
   const next = nextOccurrenceDate(resStartUTC, fromUTC)
   return isOccurrencePaid(paidOccurrencesFromPayments(payments), next)
 }
@@ -70,7 +77,10 @@ const art = (y: number, mo: number, d: number, h: number, mi = 0) =>
   DateTime.fromObject({ year: y, month: mo, day: d, hour: h, minute: mi }, { zone: ART_TZ })
 const artUTC = (y: number, mo: number, d: number, h: number, mi = 0) => art(y, mo, d, h, mi).toUTC()
 
-const pay = (type: 'deposit' | 'total', occurrenceDate: unknown): FakePayment => ({ type, occurrenceDate })
+const pay = (type: 'deposit' | 'total', occurrenceDate: unknown): FakePayment => ({
+  type,
+  occurrenceDate,
+})
 
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
@@ -91,7 +101,9 @@ test.group('Recurring payments — occurrence_date normalization', () => {
     assert.equal(normalizeOccurrenceDate(null), null)
   })
 
-  test('REGRESSION: without normalization the datetime string would NOT match the date cell', ({ assert }) => {
+  test('REGRESSION: without normalization the datetime string would NOT match the date cell', ({
+    assert,
+  }) => {
     // This is the bug found during live verification: the raw value did not equal the
     // calendar dateStr, so a paid week rendered as unpaid.
     assert.notEqual('2026-07-03T00:00:00.000Z', '2026-07-03')
@@ -104,7 +116,9 @@ test.group('Recurring payments — paidOccurrences set', () => {
     assert.deepEqual(paidOccurrencesFromPayments([pay('total', '2026-07-03')]), ['2026-07-03'])
   })
 
-  test('deposit payments are excluded (deposit is series-level, not per occurrence)', ({ assert }) => {
+  test('deposit payments are excluded (deposit is series-level, not per occurrence)', ({
+    assert,
+  }) => {
     assert.deepEqual(paidOccurrencesFromPayments([pay('deposit', '2026-07-03')]), [])
   })
 
@@ -188,25 +202,24 @@ test.group('Recurring payments — carry balance (deuda/crédito arrastrado)', (
   })
 
   test('serie que salda la deuda → 0 (semana 1 debe 3k, semana 2 paga 33k)', ({ assert }) => {
-    const payments = [
-      payFull(27000, 30000, '2026-07-03'),
-      payFull(33000, 30000, '2026-07-10'),
-    ]
+    const payments = [payFull(27000, 30000, '2026-07-03'), payFull(33000, 30000, '2026-07-10')]
     assert.equal(computeCarryBalance(payments), 0)
   })
 
-  test('crédito rueda a través de una semana oculta (sin pago) hasta la próxima cobrada', ({ assert }) => {
+  test('crédito rueda a través de una semana oculta (sin pago) hasta la próxima cobrada', ({
+    assert,
+  }) => {
     // Semana 1: pagó de más 5k. Semana 2 oculta → sin fila. Semana 3: precio 30k, cobra 25k.
-    const payments = [
-      payFull(35000, 30000, '2026-07-03'),
-      payFull(25000, 30000, '2026-07-17'),
-    ]
+    const payments = [payFull(35000, 30000, '2026-07-03'), payFull(25000, 30000, '2026-07-17')]
     assert.equal(computeCarryBalance(payments), 0)
   })
 
   test('expectedAmount null (pagos pre-feature) se excluyen del saldo', ({ assert }) => {
     assert.equal(computeCarryBalance([payFull(27000, null)]), 0)
-    assert.equal(computeCarryBalance([{ type: 'total', occurrenceDate: '2026-07-03', total: 27000 }]), 0)
+    assert.equal(
+      computeCarryBalance([{ type: 'total', occurrenceDate: '2026-07-03', total: 27000 }]),
+      0
+    )
   })
 
   test('pagos de tipo deposit no afectan el saldo', ({ assert }) => {

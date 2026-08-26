@@ -16,7 +16,11 @@ function nextOccurrenceDate(startTime: DateTime, from: DateTime): DateTime {
 }
 
 // Hidden-date-aware "next due" occurrence: skips any candidate that is already hidden.
-function nextDueOccurrence(startTime: DateTime, from: DateTime, hiddenDateStrs: string[]): DateTime {
+function nextDueOccurrence(
+  startTime: DateTime,
+  from: DateTime,
+  hiddenDateStrs: string[]
+): DateTime {
   let candidate = nextOccurrenceDate(startTime, from)
   while (hiddenDateStrs.includes(candidate.toISODate()!)) {
     candidate = candidate.plus({ weeks: 1 })
@@ -36,12 +40,17 @@ test.group('nextDueOccurrence — no hidden dates', () => {
 })
 
 test.group('nextDueOccurrence — skips already-hidden occurrences', () => {
-  test('skips the immediate occurrence when it is hidden, lands on the following week', ({ assert }) => {
+  test('skips the immediate occurrence when it is hidden, lands on the following week', ({
+    assert,
+  }) => {
     assert.equal(nextDueOccurrence(SAT_START, NOW, ['2026-06-06']).toISODate(), '2026-06-13')
   })
 
   test('skips multiple consecutive hidden occurrences', ({ assert }) => {
-    assert.equal(nextDueOccurrence(SAT_START, NOW, ['2026-06-06', '2026-06-13']).toISODate(), '2026-06-20')
+    assert.equal(
+      nextDueOccurrence(SAT_START, NOW, ['2026-06-06', '2026-06-13']).toISODate(),
+      '2026-06-20'
+    )
   })
 
   test('ignores hidden dates that do not match the pending occurrence', ({ assert }) => {

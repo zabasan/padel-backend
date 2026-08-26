@@ -8,7 +8,18 @@ import { BaseModel, column } from '@adonisjs/lucid/orm'
 import { DateTime } from 'luxon'
 
 export class AuthAccessTokenSchema extends BaseModel {
-  static $columns = ['abilities', 'createdAt', 'expiresAt', 'hash', 'id', 'lastUsedAt', 'name', 'tokenableId', 'type', 'updatedAt'] as const
+  static $columns = [
+    'abilities',
+    'createdAt',
+    'expiresAt',
+    'hash',
+    'id',
+    'lastUsedAt',
+    'name',
+    'tokenableId',
+    'type',
+    'updatedAt',
+  ] as const
   $columns = AuthAccessTokenSchema.$columns
   @column()
   declare abilities: string
@@ -33,7 +44,19 @@ export class AuthAccessTokenSchema extends BaseModel {
 }
 
 export class CashBundleSchema extends BaseModel {
-  static $columns = ['amount', 'cancelledAt', 'cancelledBy', 'cancelledInCashSessionId', 'cashSessionId', 'createdAt', 'createdBy', 'id', 'notes', 'status', 'updatedAt'] as const
+  static $columns = [
+    'amount',
+    'cancelledAt',
+    'cancelledBy',
+    'cancelledInCashSessionId',
+    'cashSessionId',
+    'createdAt',
+    'createdBy',
+    'id',
+    'notes',
+    'status',
+    'updatedAt',
+  ] as const
   $columns = CashBundleSchema.$columns
   @column()
   declare amount: string
@@ -60,7 +83,32 @@ export class CashBundleSchema extends BaseModel {
 }
 
 export class CashSessionSchema extends BaseModel {
-  static $columns = ['bundlesEfectivo', 'businessDate', 'closedAt', 'closedBy', 'countedEfectivo', 'createdAt', 'expectedCloseAt', 'id', 'inEfectivo', 'inPostnet', 'inTransferencia', 'movementsCount', 'notes', 'openMarker', 'openedAt', 'openedBy', 'openingEfectivo', 'outEfectivo', 'outPostnet', 'outTransferencia', 'shiftEndMinute', 'shiftName', 'shiftStartMinute', 'updatedAt'] as const
+  static $columns = [
+    'bundlesEfectivo',
+    'businessDate',
+    'closedAt',
+    'closedBy',
+    'countedEfectivo',
+    'createdAt',
+    'expectedCloseAt',
+    'id',
+    'inEfectivo',
+    'inPostnet',
+    'inTransferencia',
+    'movementsCount',
+    'notes',
+    'openMarker',
+    'openedAt',
+    'openedBy',
+    'openingEfectivo',
+    'outEfectivo',
+    'outPostnet',
+    'outTransferencia',
+    'shiftEndMinute',
+    'shiftName',
+    'shiftStartMinute',
+    'updatedAt',
+  ] as const
   $columns = CashSessionSchema.$columns
   @column()
   declare bundlesEfectivo: string
@@ -113,7 +161,18 @@ export class CashSessionSchema extends BaseModel {
 }
 
 export class CommerceAuditLogSchema extends BaseModel {
-  static $columns = ['action', 'createdAt', 'entityId', 'entityLabel', 'entityType', 'field', 'id', 'newValue', 'oldValue', 'performedBy'] as const
+  static $columns = [
+    'action',
+    'createdAt',
+    'entityId',
+    'entityLabel',
+    'entityType',
+    'field',
+    'id',
+    'newValue',
+    'oldValue',
+    'performedBy',
+  ] as const
   $columns = CommerceAuditLogSchema.$columns
   @column()
   declare action: string
@@ -138,7 +197,19 @@ export class CommerceAuditLogSchema extends BaseModel {
 }
 
 export class CourtPriceHistorySchema extends BaseModel {
-  static $columns = ['courtId', 'createdAt', 'effectiveFrom', 'endHour', 'id', 'isPeakHour', 'price120Min', 'price60Min', 'price90Min', 'pricePerHour', 'startHour'] as const
+  static $columns = [
+    'courtId',
+    'createdAt',
+    'effectiveFrom',
+    'endHour',
+    'id',
+    'isPeakHour',
+    'price120Min',
+    'price60Min',
+    'price90Min',
+    'pricePerHour',
+    'startHour',
+  ] as const
   $columns = CourtPriceHistorySchema.$columns
   @column()
   declare courtId: number
@@ -165,7 +236,19 @@ export class CourtPriceHistorySchema extends BaseModel {
 }
 
 export class CourtPriceRangeSchema extends BaseModel {
-  static $columns = ['courtId', 'createdAt', 'endHour', 'id', 'isPeakHour', 'price120Min', 'price60Min', 'price90Min', 'pricePerHour', 'startHour', 'updatedAt'] as const
+  static $columns = [
+    'courtId',
+    'createdAt',
+    'endHour',
+    'id',
+    'isPeakHour',
+    'price120Min',
+    'price60Min',
+    'price90Min',
+    'pricePerHour',
+    'startHour',
+    'updatedAt',
+  ] as const
   $columns = CourtPriceRangeSchema.$columns
   @column()
   declare courtId: number
@@ -192,7 +275,17 @@ export class CourtPriceRangeSchema extends BaseModel {
 }
 
 export class CourtSchema extends BaseModel {
-  static $columns = ['createdAt', 'description', 'id', 'isActive', 'name', 'parentCourtId', 'pricePerHour', 'type', 'updatedAt'] as const
+  static $columns = [
+    'createdAt',
+    'description',
+    'id',
+    'isActive',
+    'name',
+    'parentCourtId',
+    'pricePerHour',
+    'type',
+    'updatedAt',
+  ] as const
   $columns = CourtSchema.$columns
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime
@@ -232,7 +325,26 @@ export class ExpenseCategorySchema extends BaseModel {
 }
 
 export class ExpenseSchema extends BaseModel {
-  static $columns = ['amount', 'cancelledAt', 'cancelledBy', 'cancelledInCashSessionId', 'cashSessionId', 'categoryId', 'createdAt', 'createdBy', 'description', 'efectivo', 'expenseDate', 'id', 'notes', 'postnet', 'status', 'supplier', 'transferencia', 'updatedAt'] as const
+  static $columns = [
+    'amount',
+    'cancelledAt',
+    'cancelledBy',
+    'cancelledInCashSessionId',
+    'cashSessionId',
+    'categoryId',
+    'createdAt',
+    'createdBy',
+    'description',
+    'efectivo',
+    'expenseDate',
+    'id',
+    'notes',
+    'postnet',
+    'status',
+    'supplier',
+    'transferencia',
+    'updatedAt',
+  ] as const
   $columns = ExpenseSchema.$columns
   @column()
   declare amount: string
@@ -305,7 +417,21 @@ export class ProductCategorySchema extends BaseModel {
 }
 
 export class ProductSchema extends BaseModel {
-  static $columns = ['categoryId', 'cost', 'createdAt', 'deletedAt', 'id', 'isActive', 'minStock', 'name', 'price', 'sku', 'stock', 'trackStock', 'updatedAt'] as const
+  static $columns = [
+    'categoryId',
+    'cost',
+    'createdAt',
+    'deletedAt',
+    'id',
+    'isActive',
+    'minStock',
+    'name',
+    'price',
+    'sku',
+    'stock',
+    'trackStock',
+    'updatedAt',
+  ] as const
   $columns = ProductSchema.$columns
   @column()
   declare categoryId: number | null
@@ -336,7 +462,14 @@ export class ProductSchema extends BaseModel {
 }
 
 export class ProfessorPriceHistorySchema extends BaseModel {
-  static $columns = ['createdAt', 'effectiveFrom', 'id', 'priceGroup', 'priceIndividual', 'priceIndividualWeekend'] as const
+  static $columns = [
+    'createdAt',
+    'effectiveFrom',
+    'id',
+    'priceGroup',
+    'priceIndividual',
+    'priceIndividualWeekend',
+  ] as const
   $columns = ProfessorPriceHistorySchema.$columns
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime
@@ -353,7 +486,15 @@ export class ProfessorPriceHistorySchema extends BaseModel {
 }
 
 export class ReservationAuditLogSchema extends BaseModel {
-  static $columns = ['createdAt', 'field', 'id', 'newValue', 'oldValue', 'performedBy', 'reservationId'] as const
+  static $columns = [
+    'createdAt',
+    'field',
+    'id',
+    'newValue',
+    'oldValue',
+    'performedBy',
+    'reservationId',
+  ] as const
   $columns = ReservationAuditLogSchema.$columns
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime
@@ -387,7 +528,24 @@ export class ReservationHiddenDateSchema extends BaseModel {
 }
 
 export class ReservationPaymentSchema extends BaseModel {
-  static $columns = ['cashSessionId', 'createdAt', 'efectivo', 'expectedAmount', 'id', 'occurrenceDate', 'paidBy', 'postnet', 'receipt', 'reservationId', 'revertedAt', 'revertedBy', 'revertedInCashSessionId', 'total', 'transferencia', 'type'] as const
+  static $columns = [
+    'cashSessionId',
+    'createdAt',
+    'efectivo',
+    'expectedAmount',
+    'id',
+    'occurrenceDate',
+    'paidBy',
+    'postnet',
+    'receipt',
+    'reservationId',
+    'revertedAt',
+    'revertedBy',
+    'revertedInCashSessionId',
+    'total',
+    'transferencia',
+    'type',
+  ] as const
   $columns = ReservationPaymentSchema.$columns
   @column()
   declare cashSessionId: number | null
@@ -424,7 +582,44 @@ export class ReservationPaymentSchema extends BaseModel {
 }
 
 export class ReservationSchema extends BaseModel {
-  static $columns = ['cancelledAt', 'cancelledBy', 'classType', 'confirmedAt', 'confirmedBy', 'consecutiveGames', 'consecutiveGamesSnapshot', 'contactPhone', 'courtId', 'createdAt', 'customPrice', 'customerId', 'depositFixedAmount', 'depositPaid', 'depositPaidAt', 'depositPaidBy', 'depositPercentage', 'depositReceipt', 'discountPercentage', 'endTime', 'hiddenFrom', 'hiddenUntil', 'id', 'isRecurring', 'lastIncrementedAt', 'notes', 'startTime', 'status', 'totalPaid', 'totalPaidAt', 'totalPaidBy', 'totalPaidCount', 'totalPrice', 'totalReceipt', 'updatedAt', 'userId'] as const
+  static $columns = [
+    'cancelledAt',
+    'cancelledBy',
+    'classType',
+    'confirmedAt',
+    'confirmedBy',
+    'consecutiveGames',
+    'consecutiveGamesSnapshot',
+    'contactPhone',
+    'courtId',
+    'createdAt',
+    'customPrice',
+    'customerId',
+    'depositFixedAmount',
+    'depositPaid',
+    'depositPaidAt',
+    'depositPaidBy',
+    'depositPercentage',
+    'depositReceipt',
+    'discountPercentage',
+    'endTime',
+    'hiddenFrom',
+    'hiddenUntil',
+    'id',
+    'isRecurring',
+    'lastIncrementedAt',
+    'notes',
+    'startTime',
+    'status',
+    'totalPaid',
+    'totalPaidAt',
+    'totalPaidBy',
+    'totalPaidCount',
+    'totalPrice',
+    'totalReceipt',
+    'updatedAt',
+    'userId',
+  ] as const
   $columns = ReservationSchema.$columns
   @column.dateTime()
   declare cancelledAt: DateTime | null
@@ -501,7 +696,18 @@ export class ReservationSchema extends BaseModel {
 }
 
 export class RolePermissionSchema extends BaseModel {
-  static $columns = ['create', 'createdAt', 'deletedAt', 'erase', 'id', 'module', 'roleId', 'update', 'updatedAt', 'view'] as const
+  static $columns = [
+    'create',
+    'createdAt',
+    'deletedAt',
+    'erase',
+    'id',
+    'module',
+    'roleId',
+    'update',
+    'updatedAt',
+    'view',
+  ] as const
   $columns = RolePermissionSchema.$columns
   @column()
   declare create: boolean
@@ -543,7 +749,17 @@ export class RoleSchema extends BaseModel {
 }
 
 export class SaleItemSchema extends BaseModel {
-  static $columns = ['createdAt', 'id', 'productId', 'productName', 'quantity', 'saleId', 'subtotal', 'unitCost', 'unitPrice'] as const
+  static $columns = [
+    'createdAt',
+    'id',
+    'productId',
+    'productName',
+    'quantity',
+    'saleId',
+    'subtotal',
+    'unitCost',
+    'unitPrice',
+  ] as const
   $columns = SaleItemSchema.$columns
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime | null
@@ -566,7 +782,23 @@ export class SaleItemSchema extends BaseModel {
 }
 
 export class SaleSchema extends BaseModel {
-  static $columns = ['cancelledAt', 'cancelledBy', 'cancelledInCashSessionId', 'cashSessionId', 'createdAt', 'customerId', 'efectivo', 'id', 'notes', 'postnet', 'status', 'total', 'transferencia', 'updatedAt', 'userId'] as const
+  static $columns = [
+    'cancelledAt',
+    'cancelledBy',
+    'cancelledInCashSessionId',
+    'cashSessionId',
+    'createdAt',
+    'customerId',
+    'efectivo',
+    'id',
+    'notes',
+    'postnet',
+    'status',
+    'total',
+    'transferencia',
+    'updatedAt',
+    'userId',
+  ] as const
   $columns = SaleSchema.$columns
   @column.dateTime()
   declare cancelledAt: DateTime | null
@@ -610,7 +842,18 @@ export class SettingSchema extends BaseModel {
 }
 
 export class StockMovementSchema extends BaseModel {
-  static $columns = ['createdAt', 'id', 'performedBy', 'productId', 'quantity', 'reason', 'saleId', 'stockAfter', 'stockBefore', 'type'] as const
+  static $columns = [
+    'createdAt',
+    'id',
+    'performedBy',
+    'productId',
+    'quantity',
+    'reason',
+    'saleId',
+    'stockAfter',
+    'stockBefore',
+    'type',
+  ] as const
   $columns = StockMovementSchema.$columns
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime
@@ -635,7 +878,15 @@ export class StockMovementSchema extends BaseModel {
 }
 
 export class UserAuditLogSchema extends BaseModel {
-  static $columns = ['createdAt', 'field', 'id', 'newValue', 'oldValue', 'performedBy', 'targetUserId'] as const
+  static $columns = [
+    'createdAt',
+    'field',
+    'id',
+    'newValue',
+    'oldValue',
+    'performedBy',
+    'targetUserId',
+  ] as const
   $columns = UserAuditLogSchema.$columns
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime
@@ -654,7 +905,21 @@ export class UserAuditLogSchema extends BaseModel {
 }
 
 export class UserSchema extends BaseModel {
-  static $columns = ['createdAt', 'email', 'fullName', 'hasLoggedIn', 'id', 'isSuperUser', 'padelCategory', 'password', 'phone', 'role', 'roleId', 'status', 'updatedAt'] as const
+  static $columns = [
+    'createdAt',
+    'email',
+    'fullName',
+    'hasLoggedIn',
+    'id',
+    'isSuperUser',
+    'padelCategory',
+    'password',
+    'phone',
+    'role',
+    'roleId',
+    'status',
+    'updatedAt',
+  ] as const
   $columns = UserSchema.$columns
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime
@@ -685,7 +950,18 @@ export class UserSchema extends BaseModel {
 }
 
 export class UsersPermissionSchema extends BaseModel {
-  static $columns = ['create', 'createdAt', 'deletedAt', 'erase', 'id', 'module', 'update', 'updatedAt', 'userId', 'view'] as const
+  static $columns = [
+    'create',
+    'createdAt',
+    'deletedAt',
+    'erase',
+    'id',
+    'module',
+    'update',
+    'updatedAt',
+    'userId',
+    'view',
+  ] as const
   $columns = UsersPermissionSchema.$columns
   @column()
   declare create: boolean

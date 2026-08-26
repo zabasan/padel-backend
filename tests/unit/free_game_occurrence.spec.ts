@@ -61,7 +61,10 @@ function isOccurrenceFree(
 // reservations_controller.calcRecurringOccurrencePrice (task 2.2). The DB-backed branches
 // of that function (court/history lookups) are exercised for real via the functional suite
 // (promo_fields.spec.ts, pay_total_streak.spec.ts), since they require live DB access.
-function calcOccurrencePriceFreeGameShortCircuit(freeGame: boolean, customPrice: number | null): number | null {
+function calcOccurrencePriceFreeGameShortCircuit(
+  freeGame: boolean,
+  customPrice: number | null
+): number | null {
   if (freeGame) return 0
   if (customPrice != null) return null
   return 0 // placeholder — real price calc happens in production code, not mirrored here
@@ -72,24 +75,46 @@ const NOW = DateTime.fromISO('2026-06-06T12:00:00-03:00')
 const promo3plus1 = { enabled: true, games: 3, freeGames: 1 } // cycle = 4, positions 0,1,2 paid, 3 free
 
 test.group('isOccurrenceFree — cycle boundary', () => {
-  test('reservation at position games-1 (one before the boundary) is NOT free yet', ({ assert }) => {
-    const r = { consecutiveGames: 2, startTime: DateTime.fromISO('2026-05-02T10:00:00-03:00'), lastIncrementedAt: null }
+  test('reservation at position games-1 (one before the boundary) is NOT free yet', ({
+    assert,
+  }) => {
+    const r = {
+      consecutiveGames: 2,
+      startTime: DateTime.fromISO('2026-05-02T10:00:00-03:00'),
+      lastIncrementedAt: null,
+    }
     assert.isFalse(isOccurrenceFree(r, promo3plus1, [], NOW))
   })
 
-  test('reservation that reached consecutiveGames == games + freeGames - 1 marks next occurrence free', ({ assert }) => {
+  test('reservation that reached consecutiveGames == games + freeGames - 1 marks next occurrence free', ({
+    assert,
+  }) => {
     // games + freeGames - 1 = 3 → posInCycle = 3 % 4 = 3 >= games(3) → free
-    const r = { consecutiveGames: 3, startTime: DateTime.fromISO('2026-05-02T10:00:00-03:00'), lastIncrementedAt: null }
+    const r = {
+      consecutiveGames: 3,
+      startTime: DateTime.fromISO('2026-05-02T10:00:00-03:00'),
+      lastIncrementedAt: null,
+    }
     assert.isTrue(isOccurrenceFree(r, promo3plus1, [], NOW))
   })
 
   test('promo disabled never marks a free occurrence', ({ assert }) => {
-    const r = { consecutiveGames: 3, startTime: DateTime.fromISO('2026-05-02T10:00:00-03:00'), lastIncrementedAt: null }
+    const r = {
+      consecutiveGames: 3,
+      startTime: DateTime.fromISO('2026-05-02T10:00:00-03:00'),
+      lastIncrementedAt: null,
+    }
     assert.isFalse(isOccurrenceFree(r, { enabled: false, games: 3, freeGames: 1 }, [], NOW))
   })
 
-  test('cycle wraps: consecutiveGames == cycle + (games+freeGames-1) is free again next cycle', ({ assert }) => {
-    const r = { consecutiveGames: 7, startTime: DateTime.fromISO('2026-05-02T10:00:00-03:00'), lastIncrementedAt: null } // 7 % 4 = 3
+  test('cycle wraps: consecutiveGames == cycle + (games+freeGames-1) is free again next cycle', ({
+    assert,
+  }) => {
+    const r = {
+      consecutiveGames: 7,
+      startTime: DateTime.fromISO('2026-05-02T10:00:00-03:00'),
+      lastIncrementedAt: null,
+    } // 7 % 4 = 3
     assert.isTrue(isOccurrenceFree(r, promo3plus1, [], NOW))
   })
 })

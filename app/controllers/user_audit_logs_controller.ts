@@ -13,8 +13,8 @@ export default class UserAuditLogsController {
     const date = String(request.input('date') ?? '').trim()
 
     let q = UserAuditLog.query()
-      .preload('performer', p => p.select(['id', 'full_name', 'phone', 'role']))
-      .preload('targetUser', t => t.select(['id', 'full_name', 'phone', 'role']))
+      .preload('performer', (p) => p.select(['id', 'full_name', 'phone', 'role']))
+      .preload('targetUser', (t) => t.select(['id', 'full_name', 'phone', 'role']))
       .orderBy('created_at', 'desc')
 
     if (performedBy) q = q.where('performed_by', performedBy)
@@ -22,7 +22,8 @@ export default class UserAuditLogsController {
     if (date) {
       const day = DateTime.fromISO(date, { zone: ART_TZ })
       if (day.isValid) {
-        q = q.where('created_at', '>=', day.startOf('day').toUTC().toSQL()!)
+        q = q
+          .where('created_at', '>=', day.startOf('day').toUTC().toSQL()!)
           .where('created_at', '<=', day.endOf('day').toUTC().toSQL()!)
       }
     }

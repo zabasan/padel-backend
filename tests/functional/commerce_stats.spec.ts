@@ -1,9 +1,7 @@
 import { test } from '@japa/runner'
 import testUtils from '@adonisjs/core/services/test_utils'
 import { DateTime } from 'luxon'
-import { createAdmin, createProduct,
-  openCashSession,
-} from './fixtures.js'
+import { createAdmin, createProduct, openCashSession } from './fixtures.js'
 
 /**
  * Shop sales in the stats screen. The load-bearing assertion here is the LAST one: adding
@@ -47,11 +45,18 @@ test.group('stats — commerce block', (group) => {
   group.each.setup(() => testUtils.db().withGlobalTransaction())
   // La caja tiene que estar abierta: middleware.cashRegister bloquea todo movimiento
   // de plata con 409 si no lo está. Va DESPUÉS de la transacción para revertirse con ella.
-  group.each.setup(async () => { await openCashSession() })
+  group.each.setup(async () => {
+    await openCashSession()
+  })
 
   test('a sale shows up in the commerce block', async ({ client, assert }) => {
     const admin = await createAdmin()
-    const product = await createProduct({ name: 'Fixture Grip', price: 4000, cost: 2500, stock: 10 })
+    const product = await createProduct({
+      name: 'Fixture Grip',
+      price: 4000,
+      cost: 2500,
+      stock: 10,
+    })
 
     const before = await statsToday(client, admin)
 
@@ -71,7 +76,12 @@ test.group('stats — commerce block', (group) => {
 
   test('margin uses the cost snapshotted at sale time', async ({ client, assert }) => {
     const admin = await createAdmin()
-    const product = await createProduct({ name: 'Fixture Margen', price: 5000, cost: 3000, stock: 10 })
+    const product = await createProduct({
+      name: 'Fixture Margen',
+      price: 5000,
+      cost: 3000,
+      stock: 10,
+    })
 
     const before = await statsToday(client, admin)
 
@@ -188,7 +198,9 @@ test.group('stats — commerce does not corrupt the court numbers', (group) => {
   group.each.setup(() => testUtils.db().withGlobalTransaction())
   // La caja tiene que estar abierta: middleware.cashRegister bloquea todo movimiento
   // de plata con 409 si no lo está. Va DESPUÉS de la transacción para revertirse con ella.
-  group.each.setup(async () => { await openCashSession() })
+  group.each.setup(async () => {
+    await openCashSession()
+  })
 
   test('the court reconciliation still balances after a shop sale', async ({ client, assert }) => {
     const admin = await createAdmin()

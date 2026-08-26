@@ -41,8 +41,7 @@ export default class PermissionMiddleware {
     }
 
     const perms = await getRequestPermissions(ctx)
-    const satisfies = (req: PermissionRequirement) =>
-      can(perms, req.module, req.action ?? 'view')
+    const satisfies = (req: PermissionRequirement) => can(perms, req.module, req.action ?? 'view')
 
     if (!satisfies(options) && !(options.or && satisfies(options.or))) {
       return ctx.response.forbidden({ message: 'Acceso denegado: permisos insuficientes' })

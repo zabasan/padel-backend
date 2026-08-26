@@ -62,10 +62,7 @@ test.group('commerce audit — diffFields', () => {
     assert,
   }) => {
     // A partial update that omits `cost` must not be read as "cost was set to null".
-    const changes = diffFields({ name: 'Grip', cost: 2000 }, { name: 'Grip Pro' }, [
-      'name',
-      'cost',
-    ])
+    const changes = diffFields({ name: 'Grip', cost: 2000 }, { name: 'Grip Pro' }, ['name', 'cost'])
     assert.deepEqual(changes, [{ field: 'name', oldValue: 'Grip', newValue: 'Grip Pro' }])
   })
 
@@ -75,11 +72,11 @@ test.group('commerce audit — diffFields', () => {
   })
 
   test('reports every field that moved, in the order given', ({ assert }) => {
-    const changes = diffFields(
-      { name: 'A', price: 1, cost: 2 },
-      { name: 'B', price: 3, cost: 4 },
-      ['name', 'price', 'cost']
-    )
+    const changes = diffFields({ name: 'A', price: 1, cost: 2 }, { name: 'B', price: 3, cost: 4 }, [
+      'name',
+      'price',
+      'cost',
+    ])
     assert.deepEqual(
       changes.map((c) => c.field),
       ['name', 'price', 'cost']

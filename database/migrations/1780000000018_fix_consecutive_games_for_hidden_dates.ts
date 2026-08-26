@@ -21,8 +21,8 @@ export default class extends BaseSchema {
     const settings: Record<string, string> = {}
     for (const row of settingsRows ?? []) settings[row.key] = row.value
     const promoEnabled = settings['recurringPromoEnabled'] === 'true'
-    const promoGames = parseInt(settings['recurringPromoGames'] ?? '9', 10)
-    const promoFreeGames = parseInt(settings['recurringPromoFreeGames'] ?? '1', 10)
+    const promoGames = Number.parseInt(settings['recurringPromoGames'] ?? '9', 10)
+    const promoFreeGames = Number.parseInt(settings['recurringPromoFreeGames'] ?? '1', 10)
     const cycle = promoGames + promoFreeGames
 
     const [reservations] = (await this.db.rawQuery(
@@ -47,8 +47,7 @@ export default class extends BaseSchema {
     const todayART = new Date(nowART.getFullYear(), nowART.getMonth(), nowART.getDate())
 
     for (const res of reservations ?? []) {
-      const startUTC =
-        res.start_time instanceof Date ? res.start_time : new Date(res.start_time)
+      const startUTC = res.start_time instanceof Date ? res.start_time : new Date(res.start_time)
       const startART = new Date(startUTC.getTime() + ART_OFFSET_MS)
       const firstOcc = new Date(startART.getFullYear(), startART.getMonth(), startART.getDate())
 
@@ -64,8 +63,8 @@ export default class extends BaseSchema {
 
       // Find the index of the last hidden occurrence (streak breaker)
       let streakStart = 0
-      for (let i = 0; i < occurrences.length; i++) {
-        if (hidden.has(occurrences[i])) {
+      for (const [i, occurrence] of occurrences.entries()) {
+        if (hidden.has(occurrence)) {
           streakStart = i + 1 // streak resets after this hidden date
         }
       }

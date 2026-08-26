@@ -146,7 +146,8 @@ export default class UsersController {
     try {
       await assertCanActOnUser(performer, user)
     } catch (error) {
-      if (error instanceof UserActionDeniedError) return response.forbidden({ message: error.message })
+      if (error instanceof UserActionDeniedError)
+        return response.forbidden({ message: error.message })
       throw error
     }
 
@@ -272,7 +273,8 @@ export default class UsersController {
     try {
       await assertCanActOnUser(performer, user)
     } catch (error) {
-      if (error instanceof UserActionDeniedError) return response.forbidden({ message: error.message })
+      if (error instanceof UserActionDeniedError)
+        return response.forbidden({ message: error.message })
       throw error
     }
 
@@ -337,7 +339,8 @@ export default class UsersController {
     try {
       await assertCanActOnUser(performer, user)
     } catch (error) {
-      if (error instanceof UserActionDeniedError) return response.forbidden({ message: error.message })
+      if (error instanceof UserActionDeniedError)
+        return response.forbidden({ message: error.message })
       throw error
     }
 
@@ -360,7 +363,8 @@ export default class UsersController {
     try {
       await assertCanActOnUser(performer, user)
     } catch (error) {
-      if (error instanceof UserActionDeniedError) return response.forbidden({ message: error.message })
+      if (error instanceof UserActionDeniedError)
+        return response.forbidden({ message: error.message })
       throw error
     }
 

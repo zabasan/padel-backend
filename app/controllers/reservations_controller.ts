@@ -115,7 +115,12 @@ export function filterRecurringByRange<T extends { isRecurring: boolean; startTi
   return rows.filter((r) => !r.isRecurring || weekdays.has(r.startTime.setZone(ART_TZ).weekday))
 }
 
-function calculatePrice(court: Court, priceRanges: CourtPriceRange[], start: DateTime, end: DateTime): number {
+function calculatePrice(
+  court: Court,
+  priceRanges: CourtPriceRange[],
+  start: DateTime,
+  end: DateTime
+): number {
   return calculateCourtPrice(court, priceRanges, start, end)
 }
 
@@ -141,14 +146,16 @@ async function getHistoricalRanges(courtId: number, date: DateTime): Promise<Cou
 
   // The most recent effective_from batch wins — group all rows with that same effective_from
   const latestTs = rows[0].effectiveFrom.toSQL()!
-  const batch = rows.filter(r => r.effectiveFrom.toSQL() === latestTs)
+  const batch = rows.filter((r) => r.effectiveFrom.toSQL() === latestTs)
 
   // Cast to CourtPriceRange shape (same columns) so existing calc functions work
   return batch as unknown as CourtPriceRange[]
 }
 
 // Returns professor prices effective at a given date, from history.
-async function getHistoricalProfessorPrices(date: DateTime): Promise<{ individual: number; group: number; individualWeekend: number }> {
+async function getHistoricalProfessorPrices(
+  date: DateTime
+): Promise<{ individual: number; group: number; individualWeekend: number }> {
   const dateSQL = date.toUTC().toSQL()!
 
   const row = await ProfessorPriceHistory.query()
@@ -171,7 +178,9 @@ async function getHistoricalProfessorPrices(date: DateTime): Promise<{ individua
   return {
     individual: map['professorPriceIndividual'] ? Number(map['professorPriceIndividual']) : 12000,
     group: map['professorPriceGroup'] ? Number(map['professorPriceGroup']) : 15000,
-    individualWeekend: map['professorPriceIndividualWeekend'] ? Number(map['professorPriceIndividualWeekend']) : 15000,
+    individualWeekend: map['professorPriceIndividualWeekend']
+      ? Number(map['professorPriceIndividualWeekend'])
+      : 15000,
   }
 }
 
@@ -197,8 +206,10 @@ async function calcRecurringOccurrencePrice(
   if (opts.freeGame) return 0
   if (reservation.customPrice != null) return null
 
-  const court = opts.court ?? await Court.query().where('id', reservation.courtId).firstOrFail()
-  const durationMinutes = Math.round(reservation.endTime.diff(reservation.startTime, 'minutes').minutes)
+  const court = opts.court ?? (await Court.query().where('id', reservation.courtId).firstOrFail())
+  const durationMinutes = Math.round(
+    reservation.endTime.diff(reservation.startTime, 'minutes').minutes
+  )
 
   // Rebuild start DateTime for this specific occurrence (same time, different date)
   const resStartART = reservation.startTime.setZone(ART_TZ)
@@ -245,7 +256,11 @@ async function calcRecurringOccurrencePrice(
 
 // Runs an async mapper over items with a bounded number of concurrent operations, so a large
 // page never opens more DB connections than the pool can serve (which stalls/times out in prod).
-async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T, index: number) => Promise<R>): Promise<R[]> {
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T, index: number) => Promise<R>
+): Promise<R[]> {
   const results: R[] = new Array(items.length)
   let cursor = 0
   const worker = async () => {
@@ -271,7 +286,11 @@ function nextOccurrenceDate(reservation: Reservation, from: DateTime): DateTime 
 // candidate that is already in the hidden-dates set, landing on the true next playable
 // occurrence. Used wherever "next occurrence" needs to account for already-hidden dates
 // (promo/price/paid anchor, payment-driven streak increment, hide-time reset check).
-function nextDueOccurrence(reservation: Reservation, from: DateTime, hiddenDateStrs: string[]): DateTime {
+function nextDueOccurrence(
+  reservation: Reservation,
+  from: DateTime,
+  hiddenDateStrs: string[]
+): DateTime {
   let candidate = nextOccurrenceDate(reservation, from)
   while (hiddenDateStrs.includes(candidate.toISODate()!)) {
     candidate = candidate.plus({ weeks: 1 })
@@ -331,10 +350,7 @@ function computeCarryBalance(r: Reservation): number {
 
 // Returns the effective consecutive games streak, accounting for hidden dates that have
 // already passed since the last increment. A past hidden occurrence breaks the streak.
-function effectiveConsecutiveGames(
-  r: Reservation,
-  hiddenDateStrs: string[]
-): number {
+function effectiveConsecutiveGames(r: Reservation, hiddenDateStrs: string[]): number {
   if (!hiddenDateStrs.length) return r.consecutiveGames
 
   const nowART = DateTime.now().setZone(ART_TZ)
@@ -406,12 +422,16 @@ function relatedCourtIds(court: Court): number[] {
   return ids
 }
 
-function hasRecurringConflict(reservations: Reservation[], startTime: DateTime, endTime: DateTime): boolean {
+function hasRecurringConflict(
+  reservations: Reservation[],
+  startTime: DateTime,
+  endTime: DateTime
+): boolean {
   const startART = startTime.setZone(ART_TZ)
   const endART = endTime.setZone(ART_TZ)
   const startWeekday = startART.weekday
   const startMin = timeInMinutes(startTime)
-  const endMin = (endART.hour === 0 && endART.minute === 0) ? 24 * 60 : timeInMinutes(endTime)
+  const endMin = endART.hour === 0 && endART.minute === 0 ? 24 * 60 : timeInMinutes(endTime)
   const startDateISO = startART.toISODate()!
 
   for (const r of reservations) {
@@ -421,16 +441,20 @@ function hasRecurringConflict(reservations: Reservation[], startTime: DateTime, 
     const rStartDateISO = rStartART.toISODate()!
     if (startDateISO < rStartDateISO) continue
     const rStartMin = timeInMinutes(r.startTime)
-    const rEndMin = (rEndART.hour === 0 && rEndART.minute === 0) ? 24 * 60 : timeInMinutes(r.endTime)
+    const rEndMin = rEndART.hour === 0 && rEndART.minute === 0 ? 24 * 60 : timeInMinutes(r.endTime)
     if (startMin >= rEndMin || endMin <= rStartMin) continue
-    const hiddenDates = (r.hiddenDates ?? []).map(hd => toDateStr(hd.hiddenDate))
+    const hiddenDates = (r.hiddenDates ?? []).map((hd) => toDateStr(hd.hiddenDate))
     if (hiddenDates.includes(startDateISO)) continue
     return true
   }
   return false
 }
 
-async function getRecurringPromoSettings(): Promise<{ enabled: boolean; games: number; freeGames: number }> {
+async function getRecurringPromoSettings(): Promise<{
+  enabled: boolean
+  games: number
+  freeGames: number
+}> {
   const rows = await Setting.all()
   const map: Record<string, string> = {}
   for (const r of rows) map[r.key] = r.value ?? ''
@@ -441,7 +465,13 @@ async function getRecurringPromoSettings(): Promise<{ enabled: boolean; games: n
   }
 }
 
-async function logReservationChange(performedBy: number, reservationId: number, field: string, oldValue: string | null, newValue: string | null) {
+async function logReservationChange(
+  performedBy: number,
+  reservationId: number,
+  field: string,
+  oldValue: string | null,
+  newValue: string | null
+) {
   await ReservationAuditLog.create({ performedBy, reservationId, field, oldValue, newValue })
 }
 
@@ -518,7 +548,7 @@ async function serializeReservationRow(
 ): Promise<Record<string, any>> {
   const obj = r.toJSON()
   // Serialize hidden dates as a flat array of date strings
-  obj.hiddenDates = (r.hiddenDates ?? []).map(hd => toDateStr(hd.hiddenDate)).filter(Boolean)
+  obj.hiddenDates = (r.hiddenDates ?? []).map((hd) => toDateStr(hd.hiddenDate)).filter(Boolean)
 
   await attachPromoFields(obj, r, promo, nowART, obj.hiddenDates, cache)
 
@@ -543,11 +573,14 @@ export default class ReservationsController {
       // Mirror the main listing: recurring series are date-independent (the `to` bound still applies).
       if (from) {
         const fromSQL = DateTime.fromISO(from).toUTC().toSQL()!
-        summaryQuery = summaryQuery.where(q => q.where('start_time', '>=', fromSQL).orWhere('is_recurring', true))
+        summaryQuery = summaryQuery.where((q) =>
+          q.where('start_time', '>=', fromSQL).orWhere('is_recurring', true)
+        )
       }
-      if (to) summaryQuery = summaryQuery.where('start_time', '<=', DateTime.fromISO(to).toUTC().toSQL()!)
+      if (to)
+        summaryQuery = summaryQuery.where('start_time', '<=', DateTime.fromISO(to).toUTC().toSQL()!)
       const rows = filterRecurringByRange(await summaryQuery, from, to)
-      return response.ok(rows.map(r => ({ id: r.id, status: r.status })))
+      return response.ok(rows.map((r) => ({ id: r.id, status: r.status })))
     }
 
     // Paginated mode — activated only when `page` is present. The reservations list uses this;
@@ -561,7 +594,11 @@ export default class ReservationsController {
       const idFilter = request.input('id')
 
       let pq = Reservation.query()
-        .preload('court').preload('user').preload('customer').preload('hiddenDates').preload('payments')
+        .preload('court')
+        .preload('user')
+        .preload('customer')
+        .preload('hiddenDates')
+        .preload('payments')
 
       if (!staff) {
         pq = pq.where('user_id', user.id)
@@ -576,16 +613,20 @@ export default class ReservationsController {
       // contact phone. Only applied when not searching by exact id.
       if (search && !idFilter) {
         const like = `%${search}%`
-        pq = pq.where(sub => {
-          sub.whereHas('user', u => {
-            u.where('full_name', 'like', like).orWhere('phone', 'like', like)
-          }).orWhere('contact_phone', 'like', like)
+        pq = pq.where((sub) => {
+          sub
+            .whereHas('user', (u) => {
+              u.where('full_name', 'like', like).orWhere('phone', 'like', like)
+            })
+            .orWhere('contact_phone', 'like', like)
         })
       }
 
       // Match the previous client-side ordering: pending → confirmed → cancelled, then newest first.
       pq = pq
-        .orderByRaw("CASE status WHEN 'pending' THEN 0 WHEN 'confirmed' THEN 1 WHEN 'cancelled' THEN 2 ELSE 1 END")
+        .orderByRaw(
+          "CASE status WHEN 'pending' THEN 0 WHEN 'confirmed' THEN 1 WHEN 'cancelled' THEN 2 ELSE 1 END"
+        )
         .orderBy('start_time', 'desc')
 
       const paginator = await pq.paginate(currentPage, perPage)
@@ -593,7 +634,9 @@ export default class ReservationsController {
       const promo = await getRecurringPromoSettings()
       const nowART = DateTime.now().setZone(ART_TZ)
       const cache: PriceCache = { ranges: new Map() }
-      const data = await mapWithConcurrency(paginator.all(), 8, r => serializeReservationRow(r, promo, nowART, cache))
+      const data = await mapWithConcurrency(paginator.all(), 8, (r) =>
+        serializeReservationRow(r, promo, nowART, cache)
+      )
 
       return response.ok({
         data,
@@ -615,7 +658,8 @@ export default class ReservationsController {
     if (from && to && staff) {
       // Force a full DB read (as if no cache key existed) when the client opts out.
       // The fresh past segment is still written back, so this doubles as a refresh.
-      const ignoreCache = request.input('ignore_cache') === 'true' || request.input('ignore_cache') === true
+      const ignoreCache =
+        request.input('ignore_cache') === 'true' || request.input('ignore_cache') === true
       const promo = await getRecurringPromoSettings()
       const nowART = DateTime.now().setZone(ART_TZ)
       const todayStartMs = nowART.startOf('day').toMillis()
@@ -629,14 +673,18 @@ export default class ReservationsController {
 
       const serializeRows = (rows: Reservation[]) => {
         const cache: PriceCache = { ranges: new Map() }
-        return mapWithConcurrency(rows, 8, r => serializeReservationRow(r, promo, nowART, cache))
+        return mapWithConcurrency(rows, 8, (r) => serializeReservationRow(r, promo, nowART, cache))
       }
 
       // Recurring series are date-independent — always live. Preserve the generic
       // path's `start_time <= to` bound (a fija starting after the window is hidden)
       // and the weekday trim.
       const recurringModels = await Reservation.query()
-        .preload('court').preload('user').preload('customer').preload('hiddenDates').preload('payments')
+        .preload('court')
+        .preload('user')
+        .preload('customer')
+        .preload('hiddenDates')
+        .preload('payments')
         .where('is_recurring', true)
         .where('start_time', '<=', toSQL)
       const recurringRows = await serializeRows(filterRecurringByRange(recurringModels, from, to))
@@ -651,7 +699,11 @@ export default class ReservationsController {
         } else {
           const segToSQL = DateTime.fromMillis(segToMs).toUTC().toSQL()!
           const models = await Reservation.query()
-            .preload('court').preload('user').preload('customer').preload('hiddenDates').preload('payments')
+            .preload('court')
+            .preload('user')
+            .preload('customer')
+            .preload('hiddenDates')
+            .preload('payments')
             .where('is_recurring', false)
             .where('start_time', '>=', fromSQL)
             .where('start_time', '<=', segToSQL)
@@ -666,7 +718,11 @@ export default class ReservationsController {
       if (toMs >= liveStartMs) {
         const liveStartSQL = DateTime.fromMillis(liveStartMs).toUTC().toSQL()!
         const models = await Reservation.query()
-          .preload('court').preload('user').preload('customer').preload('hiddenDates').preload('payments')
+          .preload('court')
+          .preload('user')
+          .preload('customer')
+          .preload('hiddenDates')
+          .preload('payments')
           .where('is_recurring', false)
           .where('start_time', '>=', liveStartSQL)
           .where('start_time', '<=', toSQL)
@@ -679,7 +735,12 @@ export default class ReservationsController {
     }
     // ─────────────────────────────────────────────────────────────────────
 
-    let query = Reservation.query().preload('court').preload('user').preload('customer').preload('hiddenDates').preload('payments')
+    let query = Reservation.query()
+      .preload('court')
+      .preload('user')
+      .preload('customer')
+      .preload('hiddenDates')
+      .preload('payments')
 
     if (!staff) {
       query = query.where('user_id', user.id)
@@ -687,7 +748,7 @@ export default class ReservationsController {
 
     if (from) {
       const fromSQL = DateTime.fromISO(from).toUTC().toSQL()!
-      query = query.where(q => q.where('start_time', '>=', fromSQL).orWhere('is_recurring', true))
+      query = query.where((q) => q.where('start_time', '>=', fromSQL).orWhere('is_recurring', true))
     }
     if (to) query = query.where('start_time', '<=', DateTime.fromISO(to).toUTC().toSQL()!)
 
@@ -702,7 +763,9 @@ export default class ReservationsController {
     const promo = await getRecurringPromoSettings()
     const nowART = DateTime.now().setZone(ART_TZ)
     const cache: PriceCache = { ranges: new Map() }
-    const result = await mapWithConcurrency(rows, 8, r => serializeReservationRow(r, promo, nowART, cache))
+    const result = await mapWithConcurrency(rows, 8, (r) =>
+      serializeReservationRow(r, promo, nowART, cache)
+    )
 
     return response.ok(result)
   }
@@ -723,7 +786,9 @@ export default class ReservationsController {
     }
 
     const obj = reservation.toJSON()
-    obj.hiddenDates = (reservation.hiddenDates ?? []).map(hd => toDateStr(hd.hiddenDate)).filter(Boolean)
+    obj.hiddenDates = (reservation.hiddenDates ?? [])
+      .map((hd) => toDateStr(hd.hiddenDate))
+      .filter(Boolean)
 
     // Attach promo fields (isFreeGame, occurrencePrice, totalPaid, carryBalance) at parity
     // with the index listing — the modal refetches via this endpoint and needs live isFreeGame.
@@ -741,7 +806,9 @@ export default class ReservationsController {
       if (occurrenceDate.isValid) {
         try {
           const isFree = isOccurrenceFree(reservation, promo, obj.hiddenDates)
-          const occurrencePrice = await calcRecurringOccurrencePrice(reservation, occurrenceDate, { freeGame: isFree })
+          const occurrencePrice = await calcRecurringOccurrencePrice(reservation, occurrenceDate, {
+            freeGame: isFree,
+          })
           if (occurrencePrice !== null) obj.occurrencePrice = occurrencePrice
         } catch {
           // Fall back to stored totalPrice — never fail the request over price calc
@@ -794,7 +861,9 @@ export default class ReservationsController {
     // así que liberarla daría precios incorrectos, no una reserva más flexible.
     if (isProfessor || targetIsProfessor) {
       if (!isPadelCourt) {
-        return response.badRequest({ message: 'Los profesores solo pueden reservar canchas de pádel' })
+        return response.badRequest({
+          message: 'Los profesores solo pueden reservar canchas de pádel',
+        })
       }
     }
 
@@ -806,17 +875,22 @@ export default class ReservationsController {
       const rows = await Setting.all()
       const cfg: Record<string, string | null> = {}
       for (const r of rows) cfg[r.key] = r.value
-      const profStartHour = cfg['professorStartHour'] != null ? Number(cfg['professorStartHour']) : 8
+      const profStartHour =
+        cfg['professorStartHour'] != null ? Number(cfg['professorStartHour']) : 8
       const profEndHour = cfg['professorEndHour'] != null ? Number(cfg['professorEndHour']) : 18
       const startART = startTime.setZone(ART_TZ)
       const endART = endTime.setZone(ART_TZ)
       const startHour = startART.hour + startART.minute / 60
       const endHour = endART.hour + endART.minute / 60
       if (startHour < profStartHour) {
-        return response.badRequest({ message: `Las reservas de profesores deben comenzar desde las ${String(profStartHour).padStart(2,'0')}:00` })
+        return response.badRequest({
+          message: `Las reservas de profesores deben comenzar desde las ${String(profStartHour).padStart(2, '0')}:00`,
+        })
       }
       if (endHour > profEndHour) {
-        return response.badRequest({ message: `Las reservas de profesores deben terminar a las ${String(profEndHour).padStart(2,'0')}:00 o antes` })
+        return response.badRequest({
+          message: `Las reservas de profesores deben terminar a las ${String(profEndHour).padStart(2, '0')}:00 o antes`,
+        })
       }
     }
 
@@ -841,7 +915,8 @@ export default class ReservationsController {
       .where('end_time', '>', startSQL)
       .first()
 
-    if (directConflict) return response.conflict({ message: 'La cancha ya está reservada en ese horario' })
+    if (directConflict)
+      return response.conflict({ message: 'La cancha ya está reservada en ese horario' })
 
     const recurringOnCourt = await Reservation.query()
       .where('court_id', data.courtId)
@@ -850,7 +925,9 @@ export default class ReservationsController {
       .preload('hiddenDates')
 
     if (hasRecurringConflict(recurringOnCourt, startTime, endTime)) {
-      return response.conflict({ message: 'La cancha ya está reservada en ese horario (reserva recurrente)' })
+      return response.conflict({
+        message: 'La cancha ya está reservada en ese horario (reserva recurrente)',
+      })
     }
 
     // Siblings can be reserved independently — only check parent (if booking a child)
@@ -868,9 +945,10 @@ export default class ReservationsController {
 
       if (relatedDirectConflict) {
         const isParentConflict = relatedDirectConflict.courtId === court.parentCourtId
-        return response.conflict({ message: isParentConflict
-          ? 'No se puede reservar: la cancha completa ya está reservada en ese horario'
-          : 'No se puede reservar la cancha completa: una o más canchas divisibles ya están reservadas'
+        return response.conflict({
+          message: isParentConflict
+            ? 'No se puede reservar: la cancha completa ya está reservada en ese horario'
+            : 'No se puede reservar la cancha completa: una o más canchas divisibles ya están reservadas',
         })
       }
 
@@ -881,13 +959,21 @@ export default class ReservationsController {
         .preload('hiddenDates')
 
       if (relatedRecurring.length > 0) {
-        const parentRecurring = relatedRecurring.filter(r => r.courtId === court.parentCourtId)
-        const subRecurring = relatedRecurring.filter(r => r.courtId !== court.parentCourtId)
-        if (parentRecurring.length > 0 && hasRecurringConflict(parentRecurring, startTime, endTime)) {
-          return response.conflict({ message: 'No se puede reservar: la cancha completa ya está reservada en ese horario' })
+        const parentRecurring = relatedRecurring.filter((r) => r.courtId === court.parentCourtId)
+        const subRecurring = relatedRecurring.filter((r) => r.courtId !== court.parentCourtId)
+        if (
+          parentRecurring.length > 0 &&
+          hasRecurringConflict(parentRecurring, startTime, endTime)
+        ) {
+          return response.conflict({
+            message: 'No se puede reservar: la cancha completa ya está reservada en ese horario',
+          })
         }
         if (subRecurring.length > 0 && hasRecurringConflict(subRecurring, startTime, endTime)) {
-          return response.conflict({ message: 'No se puede reservar la cancha completa: una o más canchas divisibles ya están reservadas' })
+          return response.conflict({
+            message:
+              'No se puede reservar la cancha completa: una o más canchas divisibles ya están reservadas',
+          })
         }
       }
     }
@@ -911,12 +997,20 @@ export default class ReservationsController {
       const classType = data.classType ?? 'individual'
       let professorPrice: number
       if (classType === 'grupal') {
-        professorPrice = cfg2['professorPriceGroup'] != null ? Number(cfg2['professorPriceGroup']) : 15000
+        professorPrice =
+          cfg2['professorPriceGroup'] != null ? Number(cfg2['professorPriceGroup']) : 15000
       } else if (isWeekend) {
-        professorPrice = cfg2['professorPriceIndividualWeekend'] != null ? Number(cfg2['professorPriceIndividualWeekend'])
-          : (cfg2['professorPriceIndividual'] != null ? Number(cfg2['professorPriceIndividual']) : 12000)
+        professorPrice =
+          cfg2['professorPriceIndividualWeekend'] != null
+            ? Number(cfg2['professorPriceIndividualWeekend'])
+            : cfg2['professorPriceIndividual'] != null
+              ? Number(cfg2['professorPriceIndividual'])
+              : 12000
       } else {
-        professorPrice = cfg2['professorPriceIndividual'] != null ? Number(cfg2['professorPriceIndividual']) : 12000
+        professorPrice =
+          cfg2['professorPriceIndividual'] != null
+            ? Number(cfg2['professorPriceIndividual'])
+            : 12000
       }
       totalPrice = professorPrice * (data.duration / 60)
     } else {
@@ -984,7 +1078,9 @@ export default class ReservationsController {
       // Past reservations can only be cancelled by an admin (workers are limited to upcoming ones)
       const isPast = !reservation.isRecurring && reservation.endTime < DateTime.now()
       if (status === 'cancelled' && isPast && !(await canOverridePastCutoff(user))) {
-        return response.forbidden({ message: 'Solo un administrador puede cancelar una reserva pasada' })
+        return response.forbidden({
+          message: 'Solo un administrador puede cancelar una reserva pasada',
+        })
       }
 
       const oldStatus = reservation.status
@@ -1018,10 +1114,16 @@ export default class ReservationsController {
     const data = await request.validateUsing(editReservationValidator)
 
     const courtId = data.courtId ?? reservation.courtId
-    const court = await Court.query().where('id', courtId).preload('priceRanges').preload('subCourts').firstOrFail()
+    const court = await Court.query()
+      .where('id', courtId)
+      .preload('priceRanges')
+      .preload('subCourts')
+      .firstOrFail()
 
     const startTime = data.startTime ? DateTime.fromISO(data.startTime) : reservation.startTime
-    const currentDurationMin = Math.round(reservation.endTime.diff(reservation.startTime, 'minutes').minutes)
+    const currentDurationMin = Math.round(
+      reservation.endTime.diff(reservation.startTime, 'minutes').minutes
+    )
     const duration = data.duration ?? currentDurationMin
     const endTime = startTime.plus({ minutes: duration })
 
@@ -1039,7 +1141,8 @@ export default class ReservationsController {
         .where('end_time', '>', startSQLc)
         .first()
 
-      if (directConflict) return response.conflict({ message: 'La cancha ya está reservada en ese horario' })
+      if (directConflict)
+        return response.conflict({ message: 'La cancha ya está reservada en ese horario' })
 
       const recurringOnCourt = await Reservation.query()
         .where('court_id', courtId)
@@ -1049,7 +1152,9 @@ export default class ReservationsController {
         .preload('hiddenDates')
 
       if (hasRecurringConflict(recurringOnCourt, startTime, endTime)) {
-        return response.conflict({ message: 'La cancha ya está reservada en ese horario (reserva recurrente)' })
+        return response.conflict({
+          message: 'La cancha ya está reservada en ese horario (reserva recurrente)',
+        })
       }
 
       const blockingCourtIds = relatedCourtIds(court)
@@ -1065,9 +1170,10 @@ export default class ReservationsController {
 
         if (relatedDirectConflict) {
           const isParentConflict = relatedDirectConflict.courtId === court.parentCourtId
-          return response.conflict({ message: isParentConflict
-            ? 'No se puede reservar: la cancha completa ya está reservada en ese horario'
-            : 'No se puede reservar la cancha completa: una o más canchas divisibles ya están reservadas'
+          return response.conflict({
+            message: isParentConflict
+              ? 'No se puede reservar: la cancha completa ya está reservada en ese horario'
+              : 'No se puede reservar la cancha completa: una o más canchas divisibles ya están reservadas',
           })
         }
 
@@ -1078,13 +1184,21 @@ export default class ReservationsController {
           .preload('hiddenDates')
 
         if (relatedRecurring.length > 0) {
-          const parentRecurring = relatedRecurring.filter(r => r.courtId === court.parentCourtId)
-          const subRecurring = relatedRecurring.filter(r => r.courtId !== court.parentCourtId)
-          if (parentRecurring.length > 0 && hasRecurringConflict(parentRecurring, startTime, endTime)) {
-            return response.conflict({ message: 'No se puede reservar: la cancha completa ya está reservada en ese horario' })
+          const parentRecurring = relatedRecurring.filter((r) => r.courtId === court.parentCourtId)
+          const subRecurring = relatedRecurring.filter((r) => r.courtId !== court.parentCourtId)
+          if (
+            parentRecurring.length > 0 &&
+            hasRecurringConflict(parentRecurring, startTime, endTime)
+          ) {
+            return response.conflict({
+              message: 'No se puede reservar: la cancha completa ya está reservada en ese horario',
+            })
           }
           if (subRecurring.length > 0 && hasRecurringConflict(subRecurring, startTime, endTime)) {
-            return response.conflict({ message: 'No se puede reservar la cancha completa: una o más canchas divisibles ya están reservadas' })
+            return response.conflict({
+              message:
+                'No se puede reservar la cancha completa: una o más canchas divisibles ya están reservadas',
+            })
           }
         }
       }
@@ -1115,12 +1229,20 @@ export default class ReservationsController {
       const classType = data.classType ?? reservation.classType ?? 'individual'
       let professorPrice: number
       if (classType === 'grupal') {
-        professorPrice = cfg2['professorPriceGroup'] != null ? Number(cfg2['professorPriceGroup']) : 15000
+        professorPrice =
+          cfg2['professorPriceGroup'] != null ? Number(cfg2['professorPriceGroup']) : 15000
       } else if (isWeekend) {
-        professorPrice = cfg2['professorPriceIndividualWeekend'] != null ? Number(cfg2['professorPriceIndividualWeekend'])
-          : (cfg2['professorPriceIndividual'] != null ? Number(cfg2['professorPriceIndividual']) : 12000)
+        professorPrice =
+          cfg2['professorPriceIndividualWeekend'] != null
+            ? Number(cfg2['professorPriceIndividualWeekend'])
+            : cfg2['professorPriceIndividual'] != null
+              ? Number(cfg2['professorPriceIndividual'])
+              : 12000
       } else {
-        professorPrice = cfg2['professorPriceIndividual'] != null ? Number(cfg2['professorPriceIndividual']) : 12000
+        professorPrice =
+          cfg2['professorPriceIndividual'] != null
+            ? Number(cfg2['professorPriceIndividual'])
+            : 12000
       }
       totalPrice = professorPrice * (duration / 60)
     } else {
@@ -1133,7 +1255,10 @@ export default class ReservationsController {
     const auditFields: Record<string, { old: string | null; new: string | null }> = {}
 
     if (data.startTime && reservation.startTime.toUTC().toISO() !== startTime.toUTC().toISO()) {
-      auditFields['startTime'] = { old: reservation.startTime.toUTC().toISO(), new: startTime.toUTC().toISO() }
+      auditFields['startTime'] = {
+        old: reservation.startTime.toUTC().toISO(),
+        new: startTime.toUTC().toISO(),
+      }
     }
     if (data.duration !== undefined && duration !== currentDurationMin) {
       auditFields['duration'] = { old: String(currentDurationMin), new: String(duration) }
@@ -1142,10 +1267,19 @@ export default class ReservationsController {
       auditFields['courtId'] = { old: String(reservation.courtId), new: String(data.courtId) }
     }
     if (effectiveCustomPrice !== reservation.customPrice) {
-      auditFields['customPrice'] = { old: String(reservation.customPrice ?? ''), new: String(effectiveCustomPrice ?? '') }
+      auditFields['customPrice'] = {
+        old: String(reservation.customPrice ?? ''),
+        new: String(effectiveCustomPrice ?? ''),
+      }
     }
-    if (data.discountPercentage !== undefined && Number(data.discountPercentage) !== Number(reservation.discountPercentage ?? 0)) {
-      auditFields['discountPercentage'] = { old: String(reservation.discountPercentage ?? 0), new: String(data.discountPercentage) }
+    if (
+      data.discountPercentage !== undefined &&
+      Number(data.discountPercentage) !== Number(reservation.discountPercentage ?? 0)
+    ) {
+      auditFields['discountPercentage'] = {
+        old: String(reservation.discountPercentage ?? 0),
+        new: String(data.discountPercentage),
+      }
     }
     if (data.notes !== undefined && data.notes !== reservation.notes) {
       auditFields['notes'] = { old: reservation.notes, new: data.notes }
@@ -1154,13 +1288,28 @@ export default class ReservationsController {
       auditFields['contactPhone'] = { old: reservation.contactPhone, new: data.contactPhone }
     }
     if (data.isRecurring !== undefined && data.isRecurring !== reservation.isRecurring) {
-      auditFields['isRecurring'] = { old: String(reservation.isRecurring), new: String(data.isRecurring) }
+      auditFields['isRecurring'] = {
+        old: String(reservation.isRecurring),
+        new: String(data.isRecurring),
+      }
     }
-    if (data.depositPercentage !== undefined && Number(data.depositPercentage) !== Number(reservation.depositPercentage ?? 0)) {
-      auditFields['depositPercentage'] = { old: String(reservation.depositPercentage ?? ''), new: String(data.depositPercentage) }
+    if (
+      data.depositPercentage !== undefined &&
+      Number(data.depositPercentage) !== Number(reservation.depositPercentage ?? 0)
+    ) {
+      auditFields['depositPercentage'] = {
+        old: String(reservation.depositPercentage ?? ''),
+        new: String(data.depositPercentage),
+      }
     }
-    if (data.depositFixedAmount !== undefined && Number(data.depositFixedAmount ?? 0) !== Number(reservation.depositFixedAmount ?? 0)) {
-      auditFields['depositFixedAmount'] = { old: String(reservation.depositFixedAmount ?? ''), new: String(data.depositFixedAmount ?? '') }
+    if (
+      data.depositFixedAmount !== undefined &&
+      Number(data.depositFixedAmount ?? 0) !== Number(reservation.depositFixedAmount ?? 0)
+    ) {
+      auditFields['depositFixedAmount'] = {
+        old: String(reservation.depositFixedAmount ?? ''),
+        new: String(data.depositFixedAmount ?? ''),
+      }
     }
     if (data.customerId !== undefined && data.customerId !== reservation.userId) {
       auditFields['userId'] = { old: String(reservation.userId), new: String(data.customerId) }
@@ -1185,8 +1334,14 @@ export default class ReservationsController {
       contactPhone: data.contactPhone !== undefined ? data.contactPhone : reservation.contactPhone,
       notes: data.notes !== undefined ? data.notes : reservation.notes,
       isRecurring: data.isRecurring !== undefined ? data.isRecurring : reservation.isRecurring,
-      depositPercentage: data.depositPercentage !== undefined ? data.depositPercentage : reservation.depositPercentage,
-      depositFixedAmount: data.depositFixedAmount !== undefined ? data.depositFixedAmount : reservation.depositFixedAmount,
+      depositPercentage:
+        data.depositPercentage !== undefined
+          ? data.depositPercentage
+          : reservation.depositPercentage,
+      depositFixedAmount:
+        data.depositFixedAmount !== undefined
+          ? data.depositFixedAmount
+          : reservation.depositFixedAmount,
     })
 
     if (data.customerId !== undefined) {
@@ -1218,13 +1373,17 @@ export default class ReservationsController {
     }
 
     if (reservation.status === 'confirmed' && !staff && user.role === 'customer') {
-      return response.forbidden({ message: 'Las reservas confirmadas solo pueden cancelarlas admin o empleados' })
+      return response.forbidden({
+        message: 'Las reservas confirmadas solo pueden cancelarlas admin o empleados',
+      })
     }
 
     // Una reserva pasada solo la cancela quien puede pasar por encima del corte (hoy: admin).
     const isPast = !reservation.isRecurring && reservation.endTime < DateTime.now()
     if (isPast && !(await canOverridePastCutoff(user))) {
-      return response.forbidden({ message: 'Solo un administrador puede cancelar una reserva pasada' })
+      return response.forbidden({
+        message: 'Solo un administrador puede cancelar una reserva pasada',
+      })
     }
 
     const oldStatus = reservation.status
@@ -1244,13 +1403,14 @@ export default class ReservationsController {
     // Acceso por permiso en la ruta (reservation_management / payments), no por nombre de rol.
 
     const reservation = await Reservation.findOrFail(params.id)
-    if (!reservation.isRecurring) return response.badRequest({ message: 'La reserva no es recurrente' })
+    if (!reservation.isRecurring)
+      return response.badRequest({ message: 'La reserva no es recurrente' })
 
     // Hidden dates that existed BEFORE this hide, used to resolve the true next-due
     // occurrence (hidden-date-aware) — the newly hidden date itself must NOT count yet.
     await reservation.load('hiddenDates')
     const existingHiddenStrs = (reservation.hiddenDates ?? [])
-      .map(hd => toDateStr(hd.hiddenDate))
+      .map((hd) => toDateStr(hd.hiddenDate))
       .filter((v): v is string => v != null)
 
     const dateParam = request.input('date') // YYYY-MM-DD of the specific occurrence to hide
@@ -1288,7 +1448,9 @@ export default class ReservationsController {
 
     await reservation.load('hiddenDates')
     const obj = reservation.toJSON()
-    obj.hiddenDates = (reservation.hiddenDates ?? []).map(hd => toDateStr(hd.hiddenDate)).filter(Boolean)
+    obj.hiddenDates = (reservation.hiddenDates ?? [])
+      .map((hd) => toDateStr(hd.hiddenDate))
+      .filter(Boolean)
     return response.ok(obj)
   }
 
@@ -1299,7 +1461,8 @@ export default class ReservationsController {
 
     const reservation = await Reservation.findOrFail(params.id)
     // The deposit is a one-time hold per series (also for fijas), so the guard stays series-level.
-    if (reservation.depositPaid) return response.badRequest({ message: 'La seña ya fue registrada' })
+    if (reservation.depositPaid)
+      return response.badRequest({ message: 'La seña ya fue registrada' })
 
     // For recurring reservations, record which occurrence the deposit was taken against.
     let occurrenceDate: string | null = null
@@ -1345,7 +1508,13 @@ export default class ReservationsController {
 
     const depositWord = reservation.isRecurring ? 'Depósito' : 'Seña'
     const auditNote = occurrenceDate ? `$${payTotal} (${occurrenceDate})` : `$${payTotal}`
-    await logReservationChange(user.id, reservation.id, 'depositPayment', null, `${depositWord}: ${auditNote}`)
+    await logReservationChange(
+      user.id,
+      reservation.id,
+      'depositPayment',
+      null,
+      `${depositWord}: ${auditNote}`
+    )
 
     if (oldStatus !== 'confirmed') {
       await logReservationChange(user.id, reservation.id, 'status', oldStatus, 'confirmed')
@@ -1375,7 +1544,7 @@ export default class ReservationsController {
     if (reservation.isRecurring) {
       await reservation.load('hiddenDates')
       hiddenStrs = (reservation.hiddenDates ?? [])
-        .map(hd => toDateStr(hd.hiddenDate))
+        .map((hd) => toDateStr(hd.hiddenDate))
         .filter((v): v is string => v != null)
 
       const nowART = DateTime.now().setZone(ART_TZ)
@@ -1397,14 +1566,20 @@ export default class ReservationsController {
       isFree = isOccurrenceFree(reservation, promo, hiddenStrs)
       expectedAmount = isFree
         ? 0
-        : (await calcRecurringOccurrencePrice(reservation, targetOcc)) ?? Number(reservation.totalPrice)
+        : ((await calcRecurringOccurrencePrice(reservation, targetOcc)) ??
+          Number(reservation.totalPrice))
     }
 
     // For reservations with a deposit requirement, the (one-time, series-level) deposit must be
     // paid first. For recurring reservations without a deposit set, allow direct payment.
-    const hasDepositRequirement = reservation.depositPercentage != null || reservation.depositFixedAmount != null
+    const hasDepositRequirement =
+      reservation.depositPercentage != null || reservation.depositFixedAmount != null
     if (hasDepositRequirement && !reservation.depositPaid) {
-      return response.badRequest({ message: reservation.isRecurring ? 'Primero debe registrarse el depósito' : 'Primero debe registrarse el pago de la seña' })
+      return response.badRequest({
+        message: reservation.isRecurring
+          ? 'Primero debe registrarse el depósito'
+          : 'Primero debe registrarse el pago de la seña',
+      })
     }
 
     // Already-paid guard: per occurrence for recurring, per series otherwise.
@@ -1417,7 +1592,8 @@ export default class ReservationsController {
         .where('occurrence_date', occurrenceDate!)
         .whereNull('reverted_at')
         .first()
-      if (existing) return response.badRequest({ message: 'El pago de este turno ya fue registrado' })
+      if (existing)
+        return response.badRequest({ message: 'El pago de este turno ya fue registrado' })
     } else if (reservation.totalPaid) {
       return response.badRequest({ message: 'El pago total ya fue registrado' })
     }
@@ -1450,7 +1626,9 @@ export default class ReservationsController {
           second: 0,
           millisecond: 0,
         })
-        const afterLast = lastIncremented ? hdDt > lastIncremented : hdDt >= resStartART.startOf('day')
+        const afterLast = lastIncremented
+          ? hdDt > lastIncremented
+          : hdDt >= resStartART.startOf('day')
         return afterLast && hdDt < occurrenceStartART!
       })
 
@@ -1515,7 +1693,7 @@ export default class ReservationsController {
     // weekday and that specific occurrence has not been hidden.
     const occursOnQueryDate = (r: Reservation) => {
       if (r.startTime.setZone(ART_TZ).weekday !== queryWeekday) return false
-      const hiddenDates = (r.hiddenDates ?? []).map(hd => toDateStr(hd.hiddenDate))
+      const hiddenDates = (r.hiddenDates ?? []).map((hd) => toDateStr(hd.hiddenDate))
       return !hiddenDates.includes(queryDateStr)
     }
 
@@ -1555,7 +1733,8 @@ export default class ReservationsController {
     const courtIds = [court.id, ...relatedCourtIds(court)]
 
     const direct = await dayReservations(courtIds)
-    const recurring = (await recurringReservations(courtIds)).filter(occursOnQueryDate)
+    const recurringSeries = await recurringReservations(courtIds)
+    const recurring = recurringSeries.filter(occursOnQueryDate)
 
     return response.ok([...direct, ...recurring].map(asSlot))
   }
@@ -1563,7 +1742,8 @@ export default class ReservationsController {
   async showNext({ params, request, response }: HttpContext) {
     // Acceso: `reservation_management.update` en la ruta, no por nombre de rol.
     const reservation = await Reservation.findOrFail(params.id)
-    if (!reservation.isRecurring) return response.badRequest({ message: 'La reserva no es recurrente' })
+    if (!reservation.isRecurring)
+      return response.badRequest({ message: 'La reserva no es recurrente' })
 
     const dateParam = request.input('date') // YYYY-MM-DD of the specific occurrence to show
 
@@ -1580,7 +1760,9 @@ export default class ReservationsController {
 
     await reservation.load('hiddenDates')
     const obj = reservation.toJSON()
-    obj.hiddenDates = (reservation.hiddenDates ?? []).map(hd => toDateStr(hd.hiddenDate)).filter(Boolean)
+    obj.hiddenDates = (reservation.hiddenDates ?? [])
+      .map((hd) => toDateStr(hd.hiddenDate))
+      .filter(Boolean)
     return response.ok(obj)
   }
 
@@ -1589,7 +1771,7 @@ export default class ReservationsController {
 
     const logs = await ReservationAuditLog.query()
       .where('reservation_id', params.id)
-      .preload('performer', q => q.select('id', 'full_name', 'email'))
+      .preload('performer', (q) => q.select('id', 'full_name', 'email'))
       .orderBy('created_at', 'desc')
 
     return response.ok(logs)
@@ -1600,7 +1782,8 @@ export default class ReservationsController {
     const user = auth.user!
 
     const reservation = await Reservation.findOrFail(params.id)
-    if (reservation.status !== 'cancelled') return response.badRequest({ message: 'Solo se pueden revertir reservas canceladas' })
+    if (reservation.status !== 'cancelled')
+      return response.badRequest({ message: 'Solo se pueden revertir reservas canceladas' })
 
     reservation.status = 'pending'
     reservation.cancelledAt = null
@@ -1684,10 +1867,11 @@ export default class ReservationsController {
       .where('reservation_id', reservation.id)
       .whereNull('reverted_at')
 
-    if (payments.length === 0) return response.badRequest({ message: 'No hay pagos registrados para esta reserva' })
+    if (payments.length === 0)
+      return response.badRequest({ message: 'No hay pagos registrados para esta reserva' })
 
     const auditSummary = JSON.stringify(
-      payments.map(p => ({
+      payments.map((p) => ({
         type: p.type,
         total: p.total,
         efectivo: p.efectivo,
@@ -1735,17 +1919,18 @@ export default class ReservationsController {
     const date = String(request.input('date') ?? '').trim()
 
     let q = ReservationAuditLog.query()
-      .preload('performer', p => p.select('id', 'full_name', 'email', 'role'))
-      .preload('reservation', r => r.preload('court', c => c.select('id', 'name')))
+      .preload('performer', (p) => p.select('id', 'full_name', 'email', 'role'))
+      .preload('reservation', (r) => r.preload('court', (c) => c.select('id', 'name')))
       .orderBy('created_at', 'desc')
 
     if (performedBy) q = q.where('performed_by', performedBy)
     if (reservationId) q = q.where('reservation_id', reservationId)
-    if (courtId) q = q.whereHas('reservation', r => r.where('court_id', courtId))
+    if (courtId) q = q.whereHas('reservation', (r) => r.where('court_id', courtId))
     if (date) {
       const day = DateTime.fromISO(date, { zone: ART_TZ })
       if (day.isValid) {
-        q = q.where('created_at', '>=', day.startOf('day').toUTC().toSQL()!)
+        q = q
+          .where('created_at', '>=', day.startOf('day').toUTC().toSQL()!)
           .where('created_at', '<=', day.endOf('day').toUTC().toSQL()!)
       }
     }

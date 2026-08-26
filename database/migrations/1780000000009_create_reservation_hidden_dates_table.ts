@@ -6,7 +6,13 @@ export default class extends BaseSchema {
   async up() {
     this.schema.createTable(this.tableName, (table) => {
       table.increments('id')
-      table.integer('reservation_id').unsigned().notNullable().references('id').inTable('reservations').onDelete('CASCADE')
+      table
+        .integer('reservation_id')
+        .unsigned()
+        .notNullable()
+        .references('id')
+        .inTable('reservations')
+        .onDelete('CASCADE')
       table.date('hidden_date').notNullable()
       table.unique(['reservation_id', 'hidden_date'])
       table.timestamps(true, true)

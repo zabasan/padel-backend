@@ -22,17 +22,23 @@ export default class extends BaseSchema {
       const EFF_OLD = '2026-01-01 00:00:00'
       const now = new Date().toISOString().replace('T', ' ').slice(0, 19)
 
-      const settings = await db.from('settings').whereIn('key', [
-        'professorPriceIndividual',
-        'professorPriceGroup',
-        'professorPriceIndividualWeekend',
-      ])
+      const settings = await db
+        .from('settings')
+        .whereIn('key', [
+          'professorPriceIndividual',
+          'professorPriceGroup',
+          'professorPriceIndividualWeekend',
+        ])
       const map: Record<string, string> = {}
       for (const s of settings) map[s.key] = s.value ?? ''
 
-      const curIndividual = map['professorPriceIndividual'] ? Number(map['professorPriceIndividual']) : 12000
+      const curIndividual = map['professorPriceIndividual']
+        ? Number(map['professorPriceIndividual'])
+        : 12000
       const curGroup = map['professorPriceGroup'] ? Number(map['professorPriceGroup']) : 15000
-      const curWeekend = map['professorPriceIndividualWeekend'] ? Number(map['professorPriceIndividualWeekend']) : 15000
+      const curWeekend = map['professorPriceIndividualWeekend']
+        ? Number(map['professorPriceIndividualWeekend'])
+        : 15000
 
       await db.table('professor_price_history').insert({
         effective_from: EFF_OLD,

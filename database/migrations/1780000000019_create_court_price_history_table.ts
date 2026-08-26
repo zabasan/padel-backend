@@ -7,7 +7,13 @@ export default class extends BaseSchema {
 
     this.schema.createTable('court_price_history', (table) => {
       table.increments('id')
-      table.integer('court_id').unsigned().notNullable().references('id').inTable('courts').onDelete('CASCADE')
+      table
+        .integer('court_id')
+        .unsigned()
+        .notNullable()
+        .references('id')
+        .inTable('courts')
+        .onDelete('CASCADE')
       table.timestamp('effective_from', { useTz: true }).notNullable()
       table.decimal('start_hour', 5, 2).notNullable()
       table.decimal('end_hour', 5, 2).notNullable()

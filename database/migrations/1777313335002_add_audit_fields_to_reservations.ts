@@ -6,13 +6,37 @@ export default class extends BaseSchema {
   async up() {
     this.schema.alterTable(this.tableName, (table) => {
       table.timestamp('confirmed_at').nullable()
-      table.integer('confirmed_by').unsigned().references('id').inTable('users').onDelete('SET NULL').nullable()
+      table
+        .integer('confirmed_by')
+        .unsigned()
+        .references('id')
+        .inTable('users')
+        .onDelete('SET NULL')
+        .nullable()
       table.timestamp('cancelled_at').nullable()
-      table.integer('cancelled_by').unsigned().references('id').inTable('users').onDelete('SET NULL').nullable()
+      table
+        .integer('cancelled_by')
+        .unsigned()
+        .references('id')
+        .inTable('users')
+        .onDelete('SET NULL')
+        .nullable()
       table.timestamp('deposit_paid_at').nullable()
-      table.integer('deposit_paid_by').unsigned().references('id').inTable('users').onDelete('SET NULL').nullable()
+      table
+        .integer('deposit_paid_by')
+        .unsigned()
+        .references('id')
+        .inTable('users')
+        .onDelete('SET NULL')
+        .nullable()
       table.timestamp('total_paid_at').nullable()
-      table.integer('total_paid_by').unsigned().references('id').inTable('users').onDelete('SET NULL').nullable()
+      table
+        .integer('total_paid_by')
+        .unsigned()
+        .references('id')
+        .inTable('users')
+        .onDelete('SET NULL')
+        .nullable()
     })
   }
 
