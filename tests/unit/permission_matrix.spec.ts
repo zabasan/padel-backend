@@ -89,6 +89,13 @@ const ROUTE_TABLE: RouteExpectation[] = [
     action: 'erase',
     rolesAllowedToday: ['admin', 'worker', 'customer', 'professor'],
   },
+  // Notes-only edit. Mirrors the PUT it is a weaker form of.
+  {
+    route: 'PATCH reservations/:id/notes',
+    module: 'reservations',
+    action: 'update',
+    rolesAllowedToday: ['admin', 'worker', 'customer', 'professor'],
+  },
 
   {
     route: 'PATCH reservations/:id/hide-next',

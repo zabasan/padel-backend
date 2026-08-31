@@ -126,6 +126,12 @@ const routes = {
     tokens: [{"old":"/api/v1/reservations/:id","type":0,"val":"api","end":""},{"old":"/api/v1/reservations/:id","type":0,"val":"v1","end":""},{"old":"/api/v1/reservations/:id","type":0,"val":"reservations","end":""},{"old":"/api/v1/reservations/:id","type":1,"val":"id","end":""}],
     types: placeholder as Registry['reservations.destroy']['types'],
   },
+  'reservations.update_notes': {
+    methods: ["PATCH"],
+    pattern: '/api/v1/reservations/:id/notes',
+    tokens: [{"old":"/api/v1/reservations/:id/notes","type":0,"val":"api","end":""},{"old":"/api/v1/reservations/:id/notes","type":0,"val":"v1","end":""},{"old":"/api/v1/reservations/:id/notes","type":0,"val":"reservations","end":""},{"old":"/api/v1/reservations/:id/notes","type":1,"val":"id","end":""},{"old":"/api/v1/reservations/:id/notes","type":0,"val":"notes","end":""}],
+    types: placeholder as Registry['reservations.update_notes']['types'],
+  },
   'reservations.hide_next': {
     methods: ["PATCH"],
     pattern: '/api/v1/reservations/:id/hide-next',

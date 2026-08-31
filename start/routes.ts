@@ -75,6 +75,11 @@ router
         router
           .delete('reservations/:id', [controllers.Reservations, 'destroy'])
           .use(middleware.permission({ module: 'reservations', action: 'erase' }))
+        // Notes-only edit: a strictly weaker form of the PUT above, so it carries the same
+        // permission. It exists as its own route because the full edit recalculates the price.
+        router
+          .patch('reservations/:id/notes', [controllers.Reservations, 'updateNotes'])
+          .use(middleware.permission({ module: 'reservations', action: 'update' }))
 
         // Reservation management actions - admin and worker only
         router.group(() => {

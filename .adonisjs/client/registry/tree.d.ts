@@ -29,6 +29,7 @@ export interface ApiDefinition {
     store: typeof routes['reservations.store']
     update: typeof routes['reservations.update']
     destroy: typeof routes['reservations.destroy']
+    updateNotes: typeof routes['reservations.update_notes']
     hideNext: typeof routes['reservations.hide_next']
     showNext: typeof routes['reservations.show_next']
     payDeposit: typeof routes['reservations.pay_deposit']

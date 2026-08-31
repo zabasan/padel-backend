@@ -84,6 +84,17 @@ const editReservationValidator = vine.compile(
   })
 )
 
+// Notes-only edit. Deliberately NOT `editReservationValidator` with a single field: the full
+// edit path recalculates `totalPrice` from today's price ranges, so a `{notes}`-only PUT would
+// silently rewrite the price of any reservation whose court got repriced since it was booked.
+// No `maxLength` here — the column is TEXT and the full edit path imposes no cap either; adding
+// one only here would make a long pre-existing note impossible to edit from this endpoint.
+const reservationNotesValidator = vine.compile(
+  vine.object({
+    notes: vine.string().trim().optional().nullable(),
+  })
+)
+
 // Calculate price for football courts: hours × pricePerHour
 const ART_TZ = 'America/Argentina/Buenos_Aires'
 
@@ -1356,6 +1367,42 @@ export default class ReservationsController {
 
     // Invalidate both the old and new date windows (the edit may have moved it).
     reservationCalendarCache.invalidateFor(originalStartTime)
+    reservationCalendarCache.invalidateFor(reservation.startTime)
+
+    return response.ok(reservation)
+  }
+
+  // Notes-only edit, so the counter can fix an annotation from the reservation detail view
+  // without going through the full edit form.
+  async updateNotes({ params, request, auth, response }: HttpContext) {
+    const user = auth.user!
+    const reservation = await Reservation.findOrFail(params.id)
+
+    // Same ownership rule as update(): staff edits anyone's row, a professor only their own.
+    const staff = await isStaff(user)
+    if (!staff && user.role !== 'professor') {
+      return response.forbidden({ message: 'Sin permisos para modificar reservas' })
+    }
+    if (!staff && reservation.userId !== user.id) {
+      return response.forbidden({ message: 'Acceso denegado' })
+    }
+
+    // The "already happened" cutoff of update() is NOT reproduced here on purpose. That cutoff
+    // protects slot and price integrity, and a note touches neither — annotating yesterday's
+    // reservation is precisely the case this endpoint exists for.
+
+    const data = await request.validateUsing(reservationNotesValidator)
+    const oldNotes = reservation.notes
+    const nextNotes = data.notes?.trim() ? data.notes.trim() : null
+
+    if (nextNotes === oldNotes) return response.ok(reservation)
+
+    reservation.notes = nextNotes
+    await reservation.save()
+    await logReservationChange(user.id, reservation.id, 'notes', oldNotes, nextNotes)
+
+    // The past segment of GET /reservations?from&to is cached for 12h and would keep serving
+    // the old note otherwise.
     reservationCalendarCache.invalidateFor(reservation.startTime)
 
     return response.ok(reservation)

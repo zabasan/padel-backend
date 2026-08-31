@@ -24,6 +24,7 @@ export type ScannedRoutes = {
     'reservations.store': { paramsTuple?: []; params?: {} }
     'reservations.update': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'reservations.destroy': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'reservations.update_notes': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'reservations.hide_next': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'reservations.show_next': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'reservations.pay_deposit': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
@@ -207,6 +208,7 @@ export type ScannedRoutes = {
   }
   PATCH: {
     'courts.toggle_active': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'reservations.update_notes': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'reservations.hide_next': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'reservations.show_next': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'reservations.pay_deposit': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }

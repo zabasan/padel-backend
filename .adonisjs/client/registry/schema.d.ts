@@ -247,6 +247,18 @@ export interface Registry {
       errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/reservations_controller').default['destroy']>>>
     }
   }
+  'reservations.update_notes': {
+    methods: ["PATCH"]
+    pattern: '/api/v1/reservations/:id/notes'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/reservations_controller').default['updateNotes']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/reservations_controller').default['updateNotes']>>>
+    }
+  }
   'reservations.hide_next': {
     methods: ["PATCH"]
     pattern: '/api/v1/reservations/:id/hide-next'

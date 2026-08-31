@@ -508,4 +508,37 @@ test.group('route permission wiring — reservations', (group) => {
     })
     assert.notEqual(create.status(), 403)
   })
+
+  // The notes-only PATCH is gated on `reservations.update`, same as the full PUT. Both users
+  // below hold `reservation_management.view` so the controller's own staff/ownership guard is
+  // satisfied either way — what changes between them is only the verb under test.
+  test('reservations.update opens the notes-only PATCH', async ({ client, assert }) => {
+    const grantee = await createUserWithPermissions({
+      reservations: { view: true, update: true },
+      reservation_management: { view: true },
+    })
+    const court = await createPadelCourt()
+    const reservation = await createRecurringReservation(court, grantee)
+
+    const patch = await client
+      .patch(`/api/v1/reservations/${reservation.id}/notes`)
+      .loginAs(grantee)
+      .json({ notes: 'una nota' })
+    assert.notEqual(patch.status(), 403)
+  })
+
+  test('reservations.view alone does NOT open the notes-only PATCH', async ({ client }) => {
+    const viewer = await createUserWithPermissions({
+      reservations: { view: true },
+      reservation_management: { view: true },
+    })
+    const court = await createPadelCourt()
+    const reservation = await createRecurringReservation(court, viewer)
+
+    const patch = await client
+      .patch(`/api/v1/reservations/${reservation.id}/notes`)
+      .loginAs(viewer)
+      .json({ notes: 'una nota' })
+    patch.assertStatus(403)
+  })
 })
