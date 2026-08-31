@@ -162,7 +162,9 @@ export async function loadMovements(
   for (const p of paymentsIn) {
     const courtName = p.reservation?.court?.name ?? 'Cancha'
     const who = p.reservation?.customer?.fullName
-    const typeWord = p.type === 'deposit' ? 'seña' : 'turno'
+    // `debt` es el cobro del saldo arrastrado de una fija, no el de un turno. Sin este
+    // caso el arqueo lo etiquetaría "turno" y el cajero vería un cobro que no existió.
+    const typeWord = p.type === 'deposit' ? 'seña' : p.type === 'debt' ? 'deuda' : 'turno'
     movements.push({
       at: p.createdAt.toISO()!,
       kind: 'court_payment',

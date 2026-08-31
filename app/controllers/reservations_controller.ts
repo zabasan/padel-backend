@@ -353,7 +353,11 @@ function timeInMinutes(dt: DateTime): number {
 function computeCarryBalance(r: Reservation): number {
   let saldo = 0
   for (const p of r.payments ?? []) {
-    if (p.type !== 'total' || p.expectedAmount == null) continue
+    // `deposit` queda afuera: la seña es un anticipo del turno, no un pago con precio
+    // esperado contra el cual medir un desvío. `debt` sí entra — es un cobro con
+    // `expected_amount = 0`, así que aporta todo lo cobrado al saldo, que es justamente
+    // cómo salda la deuda.
+    if (p.type === 'deposit' || p.expectedAmount == null) continue
     saldo += Number(p.total) - Number(p.expectedAmount)
   }
   return Math.round(saldo * 100) / 100
@@ -1722,6 +1726,101 @@ export default class ReservationsController {
     return response.ok(reservation)
   }
 
+  /**
+   * Cobra la deuda arrastrada de una fija, sin cobrar ningún turno.
+   *
+   * Hasta acá la única forma de saldarla era cobrar de más en un turno futuro
+   * (`PaymentModal` resta el saldo del monto sugerido). Eso obliga a esperar la próxima
+   * ocurrencia y le imputa la plata a la SEMANA de esa ocurrencia, no al día en que
+   * entró. Este endpoint separa las dos cosas.
+   *
+   * Dos datos, dos preguntas distintas, y los dos apuntan a hoy:
+   *   - `cash_session_id` → en qué caja entró. Lo estampa `currentCashSessionId`, con la
+   *     sesión que `middleware.cashRegister` ya resolvió. El arqueo filtra por esta
+   *     columna, nunca por ventana de tiempo (ver la migración 1784000000005).
+   *   - `occurrence_date` = hoy en ART → en qué período lo cuentan las estadísticas. Con
+   *     `null`, las tres queries de stats caen en su fallback para fijas (`start_time`) y
+   *     le imputarían la plata al arranque de la serie, que puede ser de hace años.
+   *
+   * `expected_amount = 0` es lo que hace que el saldo se mueva: `computeCarryBalance`
+   * suma `total - expectedAmount`, así que un cobro de $3.000 mueve el saldo +3.000 sin
+   * inventar un precio de turno. Y al revertir la fila la deuda vuelve sola, porque el
+   * saldo se deriva de los pagos vigentes.
+   */
+  async settleDebt(ctx: HttpContext) {
+    const { params, request, auth, response } = ctx
+    const user = auth.user!
+    // Acceso por permiso en la ruta (payments.create), no por nombre de rol.
+
+    const reservation = await Reservation.findOrFail(params.id)
+
+    // Solo las fijas acumulan deuda: el cobro de una reserva simple exige monto exacto y
+    // guarda `expected_amount = null`, así que su saldo es siempre 0.
+    if (!reservation.isRecurring)
+      return response.badRequest({ message: 'Solo las reservas fijas acumulan deuda' })
+    if (reservation.status === 'cancelled')
+      return response.badRequest({ message: 'La reserva está cancelada' })
+
+    // La deuda se recalcula acá; el monto que manda el cliente no es fuente de verdad.
+    await reservation.load('payments')
+    const balance = computeCarryBalance(reservation)
+    if (balance >= 0) return response.badRequest({ message: 'Esta reserva no tiene deuda' })
+    const debt = Math.round(-balance * 100) / 100
+
+    const receipt = request.input('receipt', null)
+    const efectivo = Number(request.input('efectivo', 0)) || 0
+    const transferencia = Number(request.input('transferencia', 0)) || 0
+    const postnet = Number(request.input('postnet', 0)) || 0
+    const amount = Math.round((efectivo + transferencia + postnet) * 100) / 100
+
+    // A diferencia del cobro de un turno, acá $0 no significa nada: no hay ocurrencia que
+    // registrar, solo plata que entra. Cobrar de MÁS sí está permitido y queda como
+    // crédito, igual que en el cobro de una fija.
+    if (amount <= 0) return response.badRequest({ message: 'El monto debe ser mayor a $0' })
+
+    const todayART = DateTime.now().setZone(ART_TZ).toISODate()
+
+    await ReservationPayment.create({
+      reservationId: reservation.id,
+      cashSessionId: await currentCashSessionId(ctx),
+      type: 'debt',
+      efectivo,
+      transferencia,
+      postnet,
+      total: amount,
+      paidBy: user.id,
+      receipt: receipt || null,
+      occurrenceDate: todayART,
+      expectedAmount: 0,
+    })
+
+    await logReservationChange(
+      user.id,
+      reservation.id,
+      'debtPayment',
+      `Debía $${debt}`,
+      `Saldo de deuda: $${amount} (${todayART})`
+    )
+
+    reservationCalendarCache.invalidateFor(reservation.startTime)
+
+    // El listado hace `{ ...r, ...updated }` con lo que devuelve el endpoint, así que la
+    // respuesta tiene que traer el saldo nuevo y los pagos recargados — si no, el badge de
+    // deuda queda con el valor viejo hasta recargar la página.
+    //
+    // Y devuelve SOLO esos tres campos, no la reserva serializada: `serialize()` incluiría
+    // la columna cruda `total_paid` (nivel serie), que pisaría el `totalPaid` por ocurrencia
+    // que calcula `attachPromoFields` y haría desaparecer el botón "Pagó" del turno que
+    // sigue. Saldar una deuda no cambia el estado de pago de ninguna ocurrencia, así que la
+    // respuesta tampoco debería afirmarlo.
+    await reservation.load('payments')
+    return response.ok({
+      id: reservation.id,
+      carryBalance: computeCarryBalance(reservation),
+      payments: reservation.payments.map((p) => p.serialize()),
+    })
+  }
+
   async availability({ request, response }: HttpContext) {
     const courtId = request.input('court_id')
     const date = request.input('date')
@@ -1883,6 +1982,11 @@ export default class ReservationsController {
       reservation.depositPaidAt = null
       reservation.depositPaidBy = null
       reservation.depositReceipt = null
+    } else if (payment.type === 'debt') {
+      // Un cobro de deuda no pagó ningún turno, así que no hay booleano de pago que
+      // revertir: anular la fila alcanza. `carryBalance` se deriva de los pagos vigentes,
+      // así que la deuda reaparece sola. Descontar `totalPaidCount` acá restaría un turno
+      // que este pago nunca marcó como cobrado.
     } else {
       const newCount = Math.max((reservation.totalPaidCount ?? 1) - 1, 0)
       reservation.totalPaidCount = newCount

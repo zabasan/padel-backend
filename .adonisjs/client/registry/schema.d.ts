@@ -307,6 +307,18 @@ export interface Registry {
       errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/reservations_controller').default['payTotal']>>>
     }
   }
+  'reservations.settle_debt': {
+    methods: ["PATCH"]
+    pattern: '/api/v1/reservations/:id/settle-debt'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/reservations_controller').default['settleDebt']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/reservations_controller').default['settleDebt']>>>
+    }
+  }
   'reservations.audit_logs': {
     methods: ["GET","HEAD"]
     pattern: '/api/v1/reservations/:id/audit'

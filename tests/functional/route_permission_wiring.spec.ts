@@ -422,6 +422,7 @@ test.group('route permission wiring — payments', (group) => {
     const responses = await Promise.all([
       client.patch(`/api/v1/reservations/${reservation.id}/pay-deposit`).loginAs(nobody).json({}),
       client.patch(`/api/v1/reservations/${reservation.id}/pay-total`).loginAs(nobody).json({}),
+      client.patch(`/api/v1/reservations/${reservation.id}/settle-debt`).loginAs(nobody).json({}),
       client.delete(`/api/v1/reservations/${reservation.id}/payments`).loginAs(nobody),
     ])
     for (const response of responses) response.assertStatus(403)
@@ -440,6 +441,12 @@ test.group('route permission wiring — payments', (group) => {
       .loginAs(cashier)
       .json({ efectivo: 1000, transferencia: 0, postnet: 0 })
     assert.notEqual(payDeposit.status(), 403)
+
+    const settleDebt = await client
+      .patch(`/api/v1/reservations/${reservation.id}/settle-debt`)
+      .loginAs(cashier)
+      .json({ efectivo: 1000, transferencia: 0, postnet: 0 })
+    assert.notEqual(settleDebt.status(), 403)
 
     const revertAll = await client
       .delete(`/api/v1/reservations/${reservation.id}/payments`)

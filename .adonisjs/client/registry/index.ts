@@ -156,6 +156,12 @@ const routes = {
     tokens: [{"old":"/api/v1/reservations/:id/pay-total","type":0,"val":"api","end":""},{"old":"/api/v1/reservations/:id/pay-total","type":0,"val":"v1","end":""},{"old":"/api/v1/reservations/:id/pay-total","type":0,"val":"reservations","end":""},{"old":"/api/v1/reservations/:id/pay-total","type":1,"val":"id","end":""},{"old":"/api/v1/reservations/:id/pay-total","type":0,"val":"pay-total","end":""}],
     types: placeholder as Registry['reservations.pay_total']['types'],
   },
+  'reservations.settle_debt': {
+    methods: ["PATCH"],
+    pattern: '/api/v1/reservations/:id/settle-debt',
+    tokens: [{"old":"/api/v1/reservations/:id/settle-debt","type":0,"val":"api","end":""},{"old":"/api/v1/reservations/:id/settle-debt","type":0,"val":"v1","end":""},{"old":"/api/v1/reservations/:id/settle-debt","type":0,"val":"reservations","end":""},{"old":"/api/v1/reservations/:id/settle-debt","type":1,"val":"id","end":""},{"old":"/api/v1/reservations/:id/settle-debt","type":0,"val":"settle-debt","end":""}],
+    types: placeholder as Registry['reservations.settle_debt']['types'],
+  },
   'reservations.audit_logs': {
     methods: ["GET","HEAD"],
     pattern: '/api/v1/reservations/:id/audit',

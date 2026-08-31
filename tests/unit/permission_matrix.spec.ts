@@ -138,6 +138,12 @@ const ROUTE_TABLE: RouteExpectation[] = [
     action: 'create',
     rolesAllowedToday: ['admin', 'worker'],
   },
+  {
+    route: 'PATCH reservations/:id/settle-debt',
+    module: 'payments',
+    action: 'create',
+    rolesAllowedToday: ['admin', 'worker'],
+  },
   // Same inline-guard situation: revertPayment()/revertAllPayments() both check
   // `user.role !== 'admin'` (reservations_controller.ts:1516, 1562) despite the admin+worker
   // route group.

@@ -29,6 +29,7 @@ export type ScannedRoutes = {
     'reservations.show_next': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'reservations.pay_deposit': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'reservations.pay_total': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'reservations.settle_debt': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'reservations.audit_logs': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'reservations.revert': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'reservations.revert_payment': { paramsTuple: [ParamValue,ParamValue]; params: {'id': ParamValue,'paymentId': ParamValue} }
@@ -213,6 +214,7 @@ export type ScannedRoutes = {
     'reservations.show_next': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'reservations.pay_deposit': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'reservations.pay_total': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
+    'reservations.settle_debt': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'reservations.revert': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'products.toggle_active': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'users.toggle_status': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }

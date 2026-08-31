@@ -97,6 +97,12 @@ router
             .patch('reservations/:id/pay-total', [controllers.Reservations, 'payTotal'])
             .use(middleware.permission({ module: 'payments', action: 'create' }))
             .use(middleware.cashRegister())
+          // Cobrar la deuda arrastrada de una fija sin cobrar ningún turno. Es plata que
+          // entra al cajón, así que lleva `cashRegister` igual que los otros dos cobros.
+          router
+            .patch('reservations/:id/settle-debt', [controllers.Reservations, 'settleDebt'])
+            .use(middleware.permission({ module: 'payments', action: 'create' }))
+            .use(middleware.cashRegister())
           router
             .get('reservations/:id/audit', [controllers.Reservations, 'auditLogs'])
             .use(middleware.permission({ module: 'reservation_management', action: 'view' }))

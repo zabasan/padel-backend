@@ -62,7 +62,8 @@ export default class StatsController {
         COALESCE(SUM(${revenueExpr}), 0) AS total_revenue,
         COALESCE(SUM(
           CASE WHEN (
-            (r.is_recurring = 0 AND r.total_paid = 1)
+            rp.type = 'debt'
+            OR (r.is_recurring = 0 AND r.total_paid = 1)
             OR (r.is_recurring = 1 AND EXISTS (
               SELECT 1 FROM reservation_payments rpt
               WHERE rpt.reservation_id = r.id
@@ -235,6 +236,7 @@ export default class StatsController {
     // The court-revenue total counts only reservations considered billed:
     //   - non-recurring with total_paid = 1
     //   - recurring occurrences that have a type='total' payment for that occurrence_date
+    //   - type='debt' rows: settling carried-over debt pays for turns already billed
     // "Señas sin saldar" = money collected on payment rows whose reservation/occurrence is
     // NOT billed yet (deposits/partials). It's in caja but not in ingresos.
     const senasRes = await db.rawQuery(
@@ -249,6 +251,10 @@ export default class StatsController {
           OR (r.is_recurring = 1 AND rp.occurrence_date IS NOT NULL AND rp.occurrence_date >= ? AND rp.occurrence_date <= ?)
           OR (r.is_recurring = 1 AND rp.occurrence_date IS NULL AND r.start_time >= ? AND r.start_time <= ?)
         )
+        -- Un cobro de deuda (type='debt') salda un turno que YA se facturó, así que nunca
+        -- es una seña sin saldar. Sin esta línea caería del lado equivocado del split
+        -- (la invariante numérica se cumpliría igual, pero mal etiquetada).
+        AND rp.type <> 'debt'
         AND NOT (
           (r.is_recurring = 0 AND r.total_paid = 1)
           OR (r.is_recurring = 1 AND EXISTS (

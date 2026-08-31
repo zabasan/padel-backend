@@ -7,7 +7,10 @@ import User from '#models/user'
 export default class ReservationPayment extends BaseModel {
   @column({ isPrimary: true }) declare id: number
   @column() declare reservationId: number
-  @column() declare type: 'deposit' | 'total'
+  // `debt` es el cobro del saldo arrastrado de una fija, no el pago de una ocurrencia.
+  // La distinción importa: todo lo que pregunta "¿esta semana está paga?" filtra
+  // `type='total'`. Ver la migración 1785000000003.
+  @column() declare type: 'deposit' | 'total' | 'debt'
   @column() declare efectivo: number
   @column() declare transferencia: number
   @column() declare postnet: number

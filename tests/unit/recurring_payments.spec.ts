@@ -16,18 +16,20 @@ function normalizeOccurrenceDate(value: unknown): string | null {
 }
 
 interface FakePayment {
-  type: 'deposit' | 'total'
+  type: 'deposit' | 'total' | 'debt'
   occurrenceDate: unknown // string | Date | null — as it may arrive from the DB
   total?: number
   expectedAmount?: number | null
 }
 
 // Mirrors reservations_controller.computeCarryBalance: net Σ(total − expectedAmount) over
-// TOTAL payments with a non-null expectedAmount. Negative → debt, positive → credit.
+// every non-deposit payment with a non-null expectedAmount. Negative → debt, positive →
+// credit. A `debt` row (settling carried-over debt) carries expectedAmount = 0, so it adds
+// the whole collected amount to the balance — that is how it pays the debt off.
 function computeCarryBalance(payments: FakePayment[]): number {
   let saldo = 0
   for (const p of payments) {
-    if (p.type !== 'total' || p.expectedAmount == null) continue
+    if (p.type === 'deposit' || p.expectedAmount == null) continue
     saldo += Number(p.total) - Number(p.expectedAmount)
   }
   return Math.round(saldo * 100) / 100
@@ -239,6 +241,65 @@ test.group('Recurring payments — carry balance (deuda/crédito arrastrado)', (
 
   test('sin pagos → saldo 0', ({ assert }) => {
     assert.equal(computeCarryBalance([]), 0)
+  })
+
+  // Un pago `debt` cobra el saldo arrastrado sin cobrar ningún turno. Lleva
+  // expectedAmount = 0, así que aporta al saldo todo lo cobrado.
+  test('cobro de deuda parcial baja la deuda sin saldarla', ({ assert }) => {
+    const payments: FakePayment[] = [
+      payFull(27000, 30000, '2026-07-03'), // debe 3000
+      { type: 'debt', occurrenceDate: '2026-07-20', total: 1000, expectedAmount: 0 },
+    ]
+    assert.equal(computeCarryBalance(payments), -2000)
+  })
+
+  test('cobro de deuda exacto deja el saldo en 0', ({ assert }) => {
+    const payments: FakePayment[] = [
+      payFull(27000, 30000, '2026-07-03'),
+      { type: 'debt', occurrenceDate: '2026-07-20', total: 3000, expectedAmount: 0 },
+    ]
+    assert.equal(computeCarryBalance(payments), 0)
+  })
+
+  test('cobrar de más una deuda deja crédito', ({ assert }) => {
+    const payments: FakePayment[] = [
+      payFull(27000, 30000, '2026-07-03'),
+      { type: 'debt', occurrenceDate: '2026-07-20', total: 4000, expectedAmount: 0 },
+    ]
+    assert.equal(computeCarryBalance(payments), 1000)
+  })
+
+  test('revertir el cobro de deuda (quitar la fila) devuelve la deuda', ({ assert }) => {
+    const debtRow: FakePayment = {
+      type: 'debt',
+      occurrenceDate: '2026-07-20',
+      total: 3000,
+      expectedAmount: 0,
+    }
+    const all = [payFull(27000, 30000, '2026-07-03'), debtRow]
+    assert.equal(computeCarryBalance(all), 0)
+    assert.equal(computeCarryBalance([all[0]]), -3000)
+  })
+})
+
+// El cobro de una deuda lleva `occurrence_date` = la fecha de HOY, que puede caer justo en
+// un día de la serie. Si contara como pago de ocurrencia, ese turno figuraría cobrado sin
+// haberse cobrado — de ahí que sea un `type` propio y que el set por ocurrencia siga
+// filtrando `type === 'total'`.
+test.group('Recurring payments — un cobro de deuda no paga ninguna ocurrencia', () => {
+  test('la fecha del cobro de deuda no entra en paidOccurrences', ({ assert }) => {
+    const payments: FakePayment[] = [
+      { type: 'debt', occurrenceDate: '2026-07-03', total: 3000, expectedAmount: 0 },
+    ]
+    assert.deepEqual(paidOccurrencesFromPayments(payments), [])
+  })
+
+  test('la ocurrencia del día del cobro de deuda sigue impaga', ({ assert }) => {
+    const payments: FakePayment[] = [
+      { type: 'debt', occurrenceDate: '2026-07-03', total: 3000, expectedAmount: 0 },
+    ]
+    const paid = paidOccurrencesFromPayments(payments)
+    assert.isFalse(isOccurrencePaid(paid, '2026-07-03'))
   })
 })
 

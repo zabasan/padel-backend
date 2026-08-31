@@ -34,6 +34,7 @@ export interface ApiDefinition {
     showNext: typeof routes['reservations.show_next']
     payDeposit: typeof routes['reservations.pay_deposit']
     payTotal: typeof routes['reservations.pay_total']
+    settleDebt: typeof routes['reservations.settle_debt']
     auditLogs: typeof routes['reservations.audit_logs']
     revert: typeof routes['reservations.revert']
     revertPayment: typeof routes['reservations.revert_payment']
