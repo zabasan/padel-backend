@@ -70,6 +70,74 @@ test.group('guest reservations carry the configured deposit', (group) => {
     assert.isNull(created.depositFixedAmount)
   })
 
+  /**
+   * The court's own deposit wins over the global setting: padel, futbol 5 and futbol 8 do
+   * not charge the same percentage, and until now the only number available was the global
+   * one, which the counter had to correct by hand on every reservation.
+   */
+  test("the court's own percentage overrides the global setting", async ({ client, assert }) => {
+    await setDefaultDepositPercentage(50)
+    const court = await createPadelCourt(COURT_RATE, 20)
+
+    const response = await client.post('/api/v1/guest/reservations').json({
+      fullName: 'Invitado Test',
+      phone: uniquePhone(),
+      courtId: court.id,
+      startTime: slotISO(),
+      duration: 60,
+    })
+
+    response.assertStatus(200)
+    const created = await Reservation.findOrFail(reservationIdOf(response))
+    assert.equal(Number(created.depositPercentage), 20)
+  })
+
+  test('a court that defines no deposit still falls back to the global setting', async ({
+    client,
+    assert,
+  }) => {
+    await setDefaultDepositPercentage(35)
+    const court = await createPadelCourt(COURT_RATE, null)
+
+    const response = await client.post('/api/v1/guest/reservations').json({
+      fullName: 'Invitado Test',
+      phone: uniquePhone(),
+      courtId: court.id,
+      startTime: slotISO(),
+      duration: 60,
+    })
+
+    response.assertStatus(200)
+    const created = await Reservation.findOrFail(reservationIdOf(response))
+    assert.equal(Number(created.depositPercentage), 35)
+  })
+
+  /**
+   * The distinction the nullable column exists for: a court set to 0 says "no deposit
+   * here" and must silence a global above zero. If 0 were read as "defines nothing", this
+   * reservation would be born owing 50%.
+   */
+  test('a court set to 0 charges no deposit even when the global is above zero', async ({
+    client,
+    assert,
+  }) => {
+    await setDefaultDepositPercentage(50)
+    const court = await createPadelCourt(COURT_RATE, 0)
+
+    const response = await client.post('/api/v1/guest/reservations').json({
+      fullName: 'Invitado Test',
+      phone: uniquePhone(),
+      courtId: court.id,
+      startTime: slotISO(),
+      duration: 60,
+    })
+
+    response.assertStatus(200)
+    const created = await Reservation.findOrFail(reservationIdOf(response))
+    assert.isNull(created.depositPercentage)
+    assert.isNull(created.depositFixedAmount)
+  })
+
   test('the reservation is still born unpaid and pending', async ({ client, assert }) => {
     await setDefaultDepositPercentage(30)
     const court = await createPadelCourt(COURT_RATE)

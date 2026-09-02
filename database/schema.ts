@@ -277,6 +277,7 @@ export class CourtPriceRangeSchema extends BaseModel {
 export class CourtSchema extends BaseModel {
   static $columns = [
     'createdAt',
+    'depositPercentage',
     'description',
     'id',
     'isActive',
@@ -289,6 +290,8 @@ export class CourtSchema extends BaseModel {
   $columns = CourtSchema.$columns
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime
+  @column()
+  declare depositPercentage: string | null
   @column()
   declare description: string | null
   @column({ isPrimary: true })

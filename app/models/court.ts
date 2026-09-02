@@ -23,6 +23,14 @@ export default class Court extends BaseModel {
   @column()
   declare isActive: boolean
 
+  /**
+   * La seña por defecto de ESTA cancha, en porcentaje. `null` significa "no define nada,
+   * usá el global de Ajustes (`defaultDepositPercentage`)"; un `0` guardado es distinto —
+   * es "esta cancha no lleva seña" y pisa un global mayor a cero.
+   */
+  @column()
+  declare depositPercentage: number | null
+
   @column()
   declare parentCourtId: number | null
 

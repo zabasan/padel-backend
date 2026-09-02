@@ -93,8 +93,14 @@ export default class GuestReservationsController {
     // hasta ahora la fila nacía sin ninguna: nadie se la podía cobrar, porque toda la app
     // decide si hay seña mirando estas columnas. Un 0 configurado significa "sin seña" y
     // se guarda como null, que es como se escribe la ausencia de requisito.
+    //
+    // La CANCHA manda sobre el global cuando define su propia seña: pádel, fútbol 5 y
+    // fútbol 8 no cobran el mismo porcentaje. `court.depositPercentage` en null significa
+    // "esta cancha no define nada", no "cero" — por eso se compara contra null y no se usa
+    // `??` sobre un valor ya numérico.
     const depositSetting = await Setting.findBy('key', 'defaultDepositPercentage')
-    const depositPct = depositSetting?.value != null ? Number(depositSetting.value) : 30
+    const globalPct = depositSetting?.value != null ? Number(depositSetting.value) : 30
+    const depositPct = court.depositPercentage != null ? Number(court.depositPercentage) : globalPct
     const depositPercentage = Number.isFinite(depositPct) && depositPct > 0 ? depositPct : null
 
     const reservation = await Reservation.create({

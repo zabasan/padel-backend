@@ -11,6 +11,9 @@ const courtValidator = vine.compile(
     type: vine.enum(['padel', 'football'] as const),
     description: vine.string().trim().optional(),
     pricePerHour: vine.number().positive(),
+    // `nullable` a propósito: mandar null es como se LIMPIA el override para que la
+    // cancha vuelva a tomar la seña global de Ajustes.
+    depositPercentage: vine.number().min(0).max(100).optional().nullable(),
     isActive: vine.boolean().optional(),
     parentCourtId: vine.number().positive().optional().nullable(),
   })

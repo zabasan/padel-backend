@@ -194,13 +194,20 @@ export async function createUserWithPermissions(
 
 // Padel court with a single all-day price range so calcRecurringOccurrencePrice has a
 // deterministic, hour-independent price to work with.
-export async function createPadelCourt(pricePerHour = 2000): Promise<Court> {
+export async function createPadelCourt(
+  pricePerHour = 2000,
+  // `null` (the default) means the court defines no deposit of its own, so readers fall
+  // back to the global `defaultDepositPercentage` setting. A `0` is a different answer:
+  // "this court charges no deposit", and it overrides a global above zero.
+  depositPercentage: number | null = null
+): Promise<Court> {
   const court = await Court.create({
     name: unique('Fixture Padel Court'),
     type: 'padel',
     description: 'Fixture court for functional tests',
     pricePerHour,
     isActive: true,
+    depositPercentage,
   })
   await CourtPriceRange.create({
     courtId: court.id,
