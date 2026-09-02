@@ -199,6 +199,18 @@ export interface Registry {
       errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/reservations_controller').default['index']>>>
     }
   }
+  'reservations.next': {
+    methods: ["GET","HEAD"]
+    pattern: '/api/v1/reservations/next'
+    types: {
+      body: {}
+      paramsTuple: []
+      params: {}
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/reservations_controller').default['next']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/reservations_controller').default['next']>>>
+    }
+  }
   'reservations.show': {
     methods: ["GET","HEAD"]
     pattern: '/api/v1/reservations/:id'

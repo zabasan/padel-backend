@@ -279,6 +279,16 @@ export async function setProfessorPrices(opts: {
   }
 }
 
+// Pins the default deposit percentage. Same reason as the professor fixtures: settings are a
+// persisted singleton, so a test asserting on the deposit must set it rather than inherit
+// whatever value the database happens to carry. `0` means "no deposit".
+export async function setDefaultDepositPercentage(percentage: number): Promise<void> {
+  await Setting.updateOrCreate(
+    { key: 'defaultDepositPercentage' },
+    { key: 'defaultDepositPercentage', value: String(percentage) }
+  )
+}
+
 // Writes one all-day price batch into `court_price_history`, effective from `effectiveFrom`.
 // Call it once per price change so `getHistoricalRanges` has distinct batches to choose from and
 // a test can prove which occurrence date a price was resolved against.

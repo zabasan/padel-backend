@@ -25,6 +25,7 @@ export interface ApiDefinition {
   reservations: {
     availability: typeof routes['reservations.availability']
     index: typeof routes['reservations.index']
+    next: typeof routes['reservations.next']
     show: typeof routes['reservations.show']
     store: typeof routes['reservations.store']
     update: typeof routes['reservations.update']

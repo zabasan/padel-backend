@@ -63,6 +63,10 @@ router
         router
           .get('reservations', [controllers.Reservations, 'index'])
           .use(middleware.permission({ module: 'reservations', action: 'view' }))
+        // ANTES de `reservations/:id`, o la ruta comodín se come el literal `next`.
+        router
+          .get('reservations/next', [controllers.Reservations, 'next'])
+          .use(middleware.permission({ module: 'reservations', action: 'view' }))
         router
           .get('reservations/:id', [controllers.Reservations, 'show'])
           .use(middleware.permission({ module: 'reservations', action: 'view' }))

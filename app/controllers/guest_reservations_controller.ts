@@ -2,6 +2,7 @@ import type { HttpContext } from '@adonisjs/core/http'
 import User from '#models/user'
 import Reservation from '#models/reservation'
 import Court from '#models/court'
+import Setting from '#models/setting'
 import vine from '@vinejs/vine'
 import { DateTime } from 'luxon'
 import { calculateCourtPrice } from '#services/court_pricing'
@@ -87,6 +88,15 @@ export default class GuestReservationsController {
 
     const totalPrice = calculateCourtPrice(court, court.priceRanges, start, end)
 
+    // La seña por defecto de Ajustes, la misma que el mostrador aplica al reservar. El
+    // formulario de invitado la anuncia ("se requiere una seña del X% para confirmar") y
+    // hasta ahora la fila nacía sin ninguna: nadie se la podía cobrar, porque toda la app
+    // decide si hay seña mirando estas columnas. Un 0 configurado significa "sin seña" y
+    // se guarda como null, que es como se escribe la ausencia de requisito.
+    const depositSetting = await Setting.findBy('key', 'defaultDepositPercentage')
+    const depositPct = depositSetting?.value != null ? Number(depositSetting.value) : 30
+    const depositPercentage = Number.isFinite(depositPct) && depositPct > 0 ? depositPct : null
+
     const reservation = await Reservation.create({
       courtId,
       userId: user.id,
@@ -97,6 +107,7 @@ export default class GuestReservationsController {
       status: 'pending',
       totalPrice,
       isRecurring: false,
+      depositPercentage,
     })
 
     const token = await User.accessTokens.create(user)

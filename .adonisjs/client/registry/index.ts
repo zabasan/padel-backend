@@ -102,6 +102,12 @@ const routes = {
     tokens: [{"old":"/api/v1/reservations","type":0,"val":"api","end":""},{"old":"/api/v1/reservations","type":0,"val":"v1","end":""},{"old":"/api/v1/reservations","type":0,"val":"reservations","end":""}],
     types: placeholder as Registry['reservations.index']['types'],
   },
+  'reservations.next': {
+    methods: ["GET","HEAD"],
+    pattern: '/api/v1/reservations/next',
+    tokens: [{"old":"/api/v1/reservations/next","type":0,"val":"api","end":""},{"old":"/api/v1/reservations/next","type":0,"val":"v1","end":""},{"old":"/api/v1/reservations/next","type":0,"val":"reservations","end":""},{"old":"/api/v1/reservations/next","type":0,"val":"next","end":""}],
+    types: placeholder as Registry['reservations.next']['types'],
+  },
   'reservations.show': {
     methods: ["GET","HEAD"],
     pattern: '/api/v1/reservations/:id',

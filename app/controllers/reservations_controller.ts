@@ -785,6 +785,89 @@ export default class ReservationsController {
     return response.ok(result)
   }
 
+  /**
+   * The caller's next upcoming reservation — what the customer dashboard shows.
+   *
+   * It needs its own endpoint because neither existing shape answers the question:
+   * `summary=true` returns only `{id, status}`, and the paginated listing is ordered
+   * pending → confirmed → cancelled and then by start_time DESC, so the nearest upcoming
+   * row is not the first one and may not even be on the first page.
+   *
+   * A recurring series has no single "start": its next turn is the next playable
+   * occurrence, hidden dates skipped, which is why `nextDueOccurrence` is used instead of
+   * `startTime`. Both shapes come back with the SAME field names, so the caller renders one
+   * card either way and never has to know which it got.
+   *
+   * "Upcoming" means it has not ENDED yet — a match in progress is still your next one.
+   * Always scoped to the caller, staff included: this is "my next reservation", and the
+   * counter has the calendar for everyone else's.
+   */
+  async next({ auth, response }: HttpContext) {
+    const user = auth.user!
+    const nowART = DateTime.now().setZone(ART_TZ)
+
+    const rows = await Reservation.query()
+      .where('user_id', user.id)
+      .whereIn('status', ['pending', 'confirmed'])
+      .preload('court')
+      .preload('hiddenDates')
+
+    let best: { at: DateTime; row: Reservation; durationMin: number } | null = null
+
+    for (const row of rows) {
+      const durationMin = Math.round(row.endTime.diff(row.startTime, 'minutes').minutes)
+      let at: DateTime
+
+      if (row.isRecurring) {
+        const hidden = (row.hiddenDates ?? [])
+          .map((hd) => toDateStr(hd.hiddenDate))
+          .filter((v): v is string => v != null)
+        const resStartART = row.startTime.setZone(ART_TZ)
+        // A series that has not started yet is searched from its own first date, never from
+        // today — otherwise the weekday walk lands before the series exists.
+        const from = nowART > resStartART ? nowART : resStartART
+        let occurrence = nextDueOccurrence(row, from, hidden)
+        at = occurrence.set({
+          hour: resStartART.hour,
+          minute: resStartART.minute,
+          second: 0,
+          millisecond: 0,
+        })
+        // `nextDueOccurrence` works in whole days, so on the series' own weekday it can hand
+        // back today with its slot already over. Walk to the following week when it does.
+        while (at.plus({ minutes: durationMin }) <= nowART) {
+          occurrence = nextDueOccurrence(row, occurrence.plus({ days: 1 }), hidden)
+          at = occurrence.set({
+            hour: resStartART.hour,
+            minute: resStartART.minute,
+            second: 0,
+            millisecond: 0,
+          })
+        }
+      } else {
+        if (row.endTime <= nowART) continue
+        at = row.startTime.setZone(ART_TZ)
+      }
+
+      if (!best || at < best.at) best = { at, row, durationMin }
+    }
+
+    if (!best) return response.ok({ reservation: null })
+
+    return response.ok({
+      reservation: {
+        id: best.row.id,
+        courtId: best.row.courtId,
+        courtName: best.row.court?.name ?? null,
+        courtType: best.row.court?.type ?? null,
+        status: best.row.status,
+        isRecurring: best.row.isRecurring,
+        startTime: best.at.toISO(),
+        endTime: best.at.plus({ minutes: best.durationMin }).toISO(),
+      },
+    })
+  }
+
   async show({ params, auth, request, response }: HttpContext) {
     const user = auth.user!
     const reservation = await Reservation.query()
@@ -1035,6 +1118,12 @@ export default class ReservationsController {
     const discountPct = data.discountPercentage ?? 0
     totalPrice = applyDiscount(totalPrice, discountPct)
 
+    // La clase de un profesor no lleva seña. Se cobra entera a la tarifa de profesor,
+    // así que la fila nace sin requisito de anticipo aunque el form mande uno. Es la
+    // ausencia de requisito la que apaga la seña en toda la app: la UI muestra el botón
+    // (y payTotal exige la seña primero) solo cuando alguna de las dos columnas no es null.
+    const chargesDeposit = !(isProfessor || targetIsProfessor)
+
     const reservation = await Reservation.create({
       courtId: data.courtId,
       userId: targetUserId,
@@ -1045,8 +1134,10 @@ export default class ReservationsController {
       totalPrice,
       status: 'pending',
       isRecurring: data.isRecurring ?? false,
-      depositPercentage: data.depositPercentage != null ? data.depositPercentage : null,
-      depositFixedAmount: data.depositFixedAmount != null ? data.depositFixedAmount : null,
+      depositPercentage:
+        chargesDeposit && data.depositPercentage != null ? data.depositPercentage : null,
+      depositFixedAmount:
+        chargesDeposit && data.depositFixedAmount != null ? data.depositFixedAmount : null,
       depositPaid: false,
       totalPaid: false,
       discountPercentage: discountPct,
@@ -1219,9 +1310,28 @@ export default class ReservationsController {
       }
     }
 
-    // Determine target user role for price calculation
-    const targetUser = await User.find(reservation.userId)
+    // Reasignar el cliente es cosa del mostrador, igual que en store() (`isAdminOrWorker &&
+    // data.customerId`). Acá se aplicaba sin chequear a quién: un profesor, que llega a este
+    // handler para editar sus propias filas, podía PUTear la reserva a nombre de otro.
+    // `null` sigue significando "no la muevas", como antes.
+    const requestedCustomerId = isAdminOrWorker ? (data.customerId ?? null) : null
+    const effectiveUserId = requestedCustomerId ?? reservation.userId
+
+    // El precio y la seña se resuelven contra el dueño que la reserva VA A TENER, no el que
+    // tenía. Salía siempre de `reservation.userId`, así que reasignarla a un profesor en el
+    // mismo PUT la dejaba con precio de cancha y con la seña puesta.
+    const targetUser = await User.find(effectiveUserId)
     const targetIsProfessor = targetUser?.role === 'professor'
+
+    // Espeja la restricción 1 de store(): la tarifa de profesor es por hora de clase y no
+    // modela una cancha de fútbol, así que dejar pasar la combinación no da una reserva más
+    // flexible, da un precio incorrecto. Sin esto, mover una clase a fútbol —o reasignarle
+    // una cancha de fútbol a un profesor— la cobraría a la tarifa de clase.
+    if (targetIsProfessor && court.type !== 'padel') {
+      return response.badRequest({
+        message: 'Los profesores solo pueden reservar canchas de pádel',
+      })
+    }
 
     // Un no-staff (el profesor sobre sus propias filas) no puede fijar ni borrar el
     // precio manual: se preserva el que el mostrador dejó en la fila, y sigue
@@ -1326,8 +1436,8 @@ export default class ReservationsController {
         new: String(data.depositFixedAmount ?? ''),
       }
     }
-    if (data.customerId !== undefined && data.customerId !== reservation.userId) {
-      auditFields['userId'] = { old: String(reservation.userId), new: String(data.customerId) }
+    if (effectiveUserId !== reservation.userId) {
+      auditFields['userId'] = { old: String(reservation.userId), new: String(effectiveUserId) }
     }
 
     // Apply new total price audit if changed
@@ -1349,19 +1459,22 @@ export default class ReservationsController {
       contactPhone: data.contactPhone !== undefined ? data.contactPhone : reservation.contactPhone,
       notes: data.notes !== undefined ? data.notes : reservation.notes,
       isRecurring: data.isRecurring !== undefined ? data.isRecurring : reservation.isRecurring,
-      depositPercentage:
-        data.depositPercentage !== undefined
+      // Espeja store(): la clase de un profesor no lleva seña, así que el edit no puede
+      // volver a ponerle una — ni conservar la que la fila ya tenía. `targetIsProfessor`
+      // sale del dueño actual de la reserva, el mismo que gobierna el recálculo de precio.
+      depositPercentage: targetIsProfessor
+        ? null
+        : data.depositPercentage !== undefined
           ? data.depositPercentage
           : reservation.depositPercentage,
-      depositFixedAmount:
-        data.depositFixedAmount !== undefined
+      depositFixedAmount: targetIsProfessor
+        ? null
+        : data.depositFixedAmount !== undefined
           ? data.depositFixedAmount
           : reservation.depositFixedAmount,
     })
 
-    if (data.customerId !== undefined) {
-      reservation.userId = data.customerId ?? reservation.userId
-    }
+    reservation.userId = effectiveUserId
 
     await reservation.save()
 
@@ -1511,6 +1624,11 @@ export default class ReservationsController {
     // Acceso por permiso en la ruta (reservation_management / payments), no por nombre de rol.
 
     const reservation = await Reservation.findOrFail(params.id)
+    // Sin requisito de anticipo no hay seña que cobrar. Espeja la condición que ya usa la
+    // UI para mostrar el botón, y es lo que impide cobrarle seña a una clase de profesor
+    // (store/update le dejan las dos columnas en null) por una llamada directa a la API.
+    if (reservation.depositPercentage == null && reservation.depositFixedAmount == null)
+      return response.badRequest({ message: 'Esta reserva no tiene seña' })
     // The deposit is a one-time hold per series (also for fijas), so the guard stays series-level.
     if (reservation.depositPaid)
       return response.badRequest({ message: 'La seña ya fue registrada' })

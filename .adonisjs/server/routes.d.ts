@@ -20,6 +20,7 @@ export type ScannedRoutes = {
     'courts.toggle_active': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'courts.update_price_ranges': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'reservations.index': { paramsTuple?: []; params?: {} }
+    'reservations.next': { paramsTuple?: []; params?: {} }
     'reservations.show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'reservations.store': { paramsTuple?: []; params?: {} }
     'reservations.update': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
@@ -97,6 +98,7 @@ export type ScannedRoutes = {
     'courts.show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'profile.show': { paramsTuple?: []; params?: {} }
     'reservations.index': { paramsTuple?: []; params?: {} }
+    'reservations.next': { paramsTuple?: []; params?: {} }
     'reservations.show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'reservations.audit_logs': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'product_categories.index': { paramsTuple?: []; params?: {} }
@@ -131,6 +133,7 @@ export type ScannedRoutes = {
     'courts.show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'profile.show': { paramsTuple?: []; params?: {} }
     'reservations.index': { paramsTuple?: []; params?: {} }
+    'reservations.next': { paramsTuple?: []; params?: {} }
     'reservations.show': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'reservations.audit_logs': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'product_categories.index': { paramsTuple?: []; params?: {} }
