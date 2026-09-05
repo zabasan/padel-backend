@@ -90,6 +90,11 @@ router
           router
             .patch('reservations/:id/hide-next', [controllers.Reservations, 'hideNext'])
             .use(middleware.permission({ module: 'reservation_management', action: 'update' }))
+          // Alta/baja de una serie en la promo de partidos consecutivos: decisión del
+          // mostrador, no del cliente, así que va con el resto de la gestión.
+          router
+            .patch('reservations/:id/promo', [controllers.Reservations, 'updatePromo'])
+            .use(middleware.permission({ module: 'reservation_management', action: 'update' }))
           router
             .patch('reservations/:id/show-next', [controllers.Reservations, 'showNext'])
             .use(middleware.permission({ module: 'reservation_management', action: 'update' }))

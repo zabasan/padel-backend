@@ -144,6 +144,12 @@ const routes = {
     tokens: [{"old":"/api/v1/reservations/:id/hide-next","type":0,"val":"api","end":""},{"old":"/api/v1/reservations/:id/hide-next","type":0,"val":"v1","end":""},{"old":"/api/v1/reservations/:id/hide-next","type":0,"val":"reservations","end":""},{"old":"/api/v1/reservations/:id/hide-next","type":1,"val":"id","end":""},{"old":"/api/v1/reservations/:id/hide-next","type":0,"val":"hide-next","end":""}],
     types: placeholder as Registry['reservations.hide_next']['types'],
   },
+  'reservations.update_promo': {
+    methods: ["PATCH"],
+    pattern: '/api/v1/reservations/:id/promo',
+    tokens: [{"old":"/api/v1/reservations/:id/promo","type":0,"val":"api","end":""},{"old":"/api/v1/reservations/:id/promo","type":0,"val":"v1","end":""},{"old":"/api/v1/reservations/:id/promo","type":0,"val":"reservations","end":""},{"old":"/api/v1/reservations/:id/promo","type":1,"val":"id","end":""},{"old":"/api/v1/reservations/:id/promo","type":0,"val":"promo","end":""}],
+    types: placeholder as Registry['reservations.update_promo']['types'],
+  },
   'reservations.show_next': {
     methods: ["PATCH"],
     pattern: '/api/v1/reservations/:id/show-next',

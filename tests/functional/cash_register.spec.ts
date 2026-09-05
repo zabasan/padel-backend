@@ -317,6 +317,51 @@ test.group('caja — el bloqueo de movimientos', (group) => {
   })
 
   /**
+   * El 409 lleva los totales VIVOS del turno que se va a cerrar.
+   *
+   * Las columnas `in_*` / `out_*` de la sesión se escriben recién al cerrar (ver
+   * applyClose), así que en una sesión abierta valen 0. El modal que ofrece rotar los
+   * usaba para mostrar el resumen y para calcular el efectivo esperado: proponía cerrar
+   * "con $0" un turno que tenía plata adentro, y el conteo del cajón no tenía contra qué
+   * compararse.
+   */
+  test('el 409 por cambio de turno trae los totales vivos, no los congelados', async ({
+    client,
+    assert,
+  }) => {
+    const staff = await createUserWithPermissions(CASH_AND_PAY_GRANTS)
+    const around = shiftAroundNow('Mañana')
+    await setShifts([around])
+    const session = await openSessionWith(staff, {
+      shiftName: 'Mañana',
+      startMinute: around.startMinute,
+      endMinute: around.endMinute,
+    })
+
+    // Un cobro que SÍ entra: el turno abierto es el que corre.
+    const paid = await payCourt(client, staff, 5000)
+    paid.assertStatus(200)
+
+    // Las columnas congeladas siguen en cero: el turno no se cerró.
+    await session.refresh()
+    assert.equal(Number(session.inEfectivo), 0, 'in_efectivo se escribe recién al cerrar')
+
+    // Ahora corre otro turno: el próximo cobro choca contra el gate.
+    await setShifts([shiftAroundNow('Tarde')])
+    const blocked = await payCourt(client, staff, 1000)
+    blocked.assertStatus(409)
+
+    const body = blocked.body()
+    assert.equal(body.code, 'CASH_SHIFT_CHANGED')
+    assert.equal(body.totals.net.efectivo, 5000, 'el resumen del modal muestra lo cobrado')
+    assert.equal(
+      body.totals.expectedEfectivo,
+      5000,
+      'y el conteo del cajón tiene contra qué medirse'
+    )
+  })
+
+  /**
    * Mismo NOMBRE de turno, distinta fecha: alguien se olvidó de cerrar el Tarde de ayer
    * y hoy vuelve a correr Tarde. Hay que rotar igual — 24 horas de movimientos en una
    * sola sesión no son un turno. Por eso la comparación va sobre (turno, fecha) y no

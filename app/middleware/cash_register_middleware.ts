@@ -1,10 +1,12 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import type { NextFn } from '@adonisjs/core/types/http'
 import {
+  loadMovements,
   minuteLabel,
   primeRequestCashSession,
   resolveCashState,
   serializeSession,
+  totalsFor,
 } from '#services/cash_register'
 
 /**
@@ -42,10 +44,19 @@ export default class CashRegisterMiddleware {
 
     if (state.reason === 'shift_changed') {
       const open = state.session!
+      // Los totales VIVOS del turno que se va a cerrar. Las columnas in_*/out_* de la
+      // sesión recién se escriben al cerrar (ver applyClose), así que en una sesión
+      // abierta valen 0 — el front no puede sacar de ahí ni el resumen ni el efectivo
+      // esperado contra el que se cuenta el cajón.
+      //
+      // `canSeeExpenseDetail: false` no achica la cifra: ese permiso solo tapa la
+      // descripción del gasto, nunca su monto. Acá van agregados, sin etiquetas.
+      const movements = await loadMovements(open.id, { canSeeExpenseDetail: false })
       return ctx.response.conflict({
         code: 'CASH_SHIFT_CHANGED',
         message: `Está abierto el turno ${open.shiftName} (${minuteLabel(open.shiftStartMinute)}–${minuteLabel(open.shiftEndMinute)}) pero ahora corre ${labelOf(state.shiftInCourse!.shift)}. Hay que cerrar el turno abierto y abrir el que corre.`,
         session: serializeSession(open),
+        totals: totalsFor(movements, open.openingEfectivo),
         nextShift: {
           ...state.shiftInCourse!,
           label: labelOf(state.shiftInCourse!.shift),

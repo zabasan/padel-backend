@@ -283,6 +283,18 @@ export interface Registry {
       errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/reservations_controller').default['hideNext']>>>
     }
   }
+  'reservations.update_promo': {
+    methods: ["PATCH"]
+    pattern: '/api/v1/reservations/:id/promo'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/reservations_controller').default['updatePromo']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/reservations_controller').default['updatePromo']>>>
+    }
+  }
   'reservations.show_next': {
     methods: ["PATCH"]
     pattern: '/api/v1/reservations/:id/show-next'

@@ -110,6 +110,14 @@ export default class Reservation extends BaseModel {
   @column()
   declare consecutiveGames: number
 
+  // Participación de ESTA serie en la promo de partidos consecutivos. Apagarla congela
+  // `consecutiveGames` en 0: no suma con cada pago ni habilita el partido gratis.
+  // Inerte en reservas no recurrentes.
+  // `consume` porque MySQL devuelve tinyint 0/1 y el front necesita distinguir el `false`
+  // explícito de "el campo no vino" — un 0 crudo se serializa como número, no como booleano.
+  @column({ consume: (v) => Boolean(v) })
+  declare promoEnabled: boolean
+
   @column()
   declare consecutiveGamesSnapshot: number | null
 

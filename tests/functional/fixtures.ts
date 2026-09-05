@@ -492,6 +492,7 @@ export async function createRecurringReservation(
     totalPrice?: number
     discountPercentage?: number
     customPrice?: number | null
+    promoEnabled?: boolean
   } = {}
 ): Promise<Reservation> {
   const hour = opts.hour ?? 10
@@ -521,6 +522,7 @@ export async function createRecurringReservation(
     consecutiveGames: opts.consecutiveGames ?? 0,
     lastIncrementedAt,
     customPrice: opts.customPrice ?? null,
+    promoEnabled: opts.promoEnabled ?? true,
   })
 }
 

@@ -32,6 +32,7 @@ export interface ApiDefinition {
     destroy: typeof routes['reservations.destroy']
     updateNotes: typeof routes['reservations.update_notes']
     hideNext: typeof routes['reservations.hide_next']
+    updatePromo: typeof routes['reservations.update_promo']
     showNext: typeof routes['reservations.show_next']
     payDeposit: typeof routes['reservations.pay_deposit']
     payTotal: typeof routes['reservations.pay_total']

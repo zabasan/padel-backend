@@ -95,6 +95,14 @@ const reservationNotesValidator = vine.compile(
   })
 )
 
+// Promo-only edit, por el mismo motivo que `reservationNotesValidator`: el PUT completo
+// recalcula `totalPrice` con las tarifas de hoy y rechaza reservas pasadas.
+const reservationPromoValidator = vine.compile(
+  vine.object({
+    promoEnabled: vine.boolean(),
+  })
+)
+
 // Calculate price for football courts: hours × pricePerHour
 const ART_TZ = 'America/Argentina/Buenos_Aires'
 
@@ -410,7 +418,9 @@ function isOccurrenceFree(
   promo: { enabled: boolean; games: number; freeGames: number },
   hiddenDateStrs: string[]
 ): boolean {
-  if (!r.isRecurring || !promo.enabled || promo.games <= 0) return false
+  // `promoEnabled` es el opt-out por reserva: la promo global sigue prendida, pero esta
+  // serie no participa, así que nunca llega a un partido gratis.
+  if (!r.isRecurring || !r.promoEnabled || !promo.enabled || promo.games <= 0) return false
   const cycle = promo.games + promo.freeGames
   const effectiveGames = effectiveConsecutiveGames(r, hiddenDateStrs)
   const posInCycle = effectiveGames % cycle
@@ -522,7 +532,7 @@ async function attachPromoFields(
   obj.carryBalance = computeCarryBalance(r)
 
   const isFree = isOccurrenceFree(r, promo, hiddenDateStrs)
-  if (promo.enabled && promo.games > 0) {
+  if (promo.enabled && promo.games > 0 && r.promoEnabled) {
     const cycle = promo.games + promo.freeGames
     const effectiveGames = effectiveConsecutiveGames(r, hiddenDateStrs)
     obj.isFreeGame = isFree
@@ -1525,6 +1535,45 @@ export default class ReservationsController {
     return response.ok(reservation)
   }
 
+  // Prende o apaga la promo de partidos consecutivos para ESTA serie. Endpoint propio, no
+  // `update()`: el PUT recalcula el precio y bloquea reservas pasadas, y ninguna de las dos
+  // cosas tiene que ver con quién participa de la promo.
+  async updatePromo({ params, request, auth, response }: HttpContext) {
+    const user = auth.user!
+    const reservation = await Reservation.findOrFail(params.id)
+
+    // Decisión comercial, no del cliente: solo el mostrador la toma. A diferencia de las
+    // notas, acá NO alcanza con ser dueño de la reserva.
+    if (!(await isStaff(user))) {
+      return response.forbidden({ message: 'Sin permisos para modificar la promo' })
+    }
+
+    const data = await request.validateUsing(reservationPromoValidator)
+    const oldValue = reservation.promoEnabled
+    if (data.promoEnabled === oldValue) return response.ok(reservation)
+
+    reservation.promoEnabled = data.promoEnabled
+    if (!data.promoEnabled) {
+      // Apagar la promo resetea la racha. Volver a prenderla arranca de cero: la serie no
+      // acumuló nada mientras estuvo afuera, así que no hay racha vieja que restaurar.
+      reservation.consecutiveGames = 0
+      reservation.lastIncrementedAt = null
+    }
+    await reservation.save()
+
+    await logReservationChange(
+      user.id,
+      reservation.id,
+      'promoEnabled',
+      String(oldValue),
+      String(data.promoEnabled)
+    )
+
+    reservationCalendarCache.invalidateFor(reservation.startTime)
+
+    return response.ok(reservation)
+  }
+
   async destroy({ params, auth, response }: HttpContext) {
     const user = auth.user!
     const reservation = await Reservation.findOrFail(params.id)
@@ -1785,7 +1834,13 @@ export default class ReservationsController {
     // construction — no separate guard needed). Ported from the deleted `incrementGames`:
     // a hidden occurrence strictly between the last increment and the one being paid now
     // breaks the streak before the +1 is applied.
-    if (reservation.isRecurring && occurrenceStartART) {
+    // `promoEnabled === false` saca a la serie de la promo: el contador queda clavado en 0
+    // y ningún pago lo mueve. No alcanza con no sumar — se fuerza el 0 en cada pago para que
+    // un valor viejo (la promo estuvo prendida antes) no reviva al volver a prenderla.
+    if (reservation.isRecurring && !reservation.promoEnabled) {
+      reservation.consecutiveGames = 0
+      reservation.lastIncrementedAt = null
+    } else if (reservation.isRecurring && occurrenceStartART) {
       const resStartART = reservation.startTime.setZone(ART_TZ)
       const lastIncremented = reservation.lastIncrementedAt
       const streakBroken = hiddenStrs.some((dateStr) => {
